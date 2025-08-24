@@ -1,9 +1,11 @@
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+using Unity.Netcode;
 
 public class MatchUI : MonoBehaviour
 {
+    [Header("Refs")]
     public TurnManager turnManager;
     public TextMeshProUGUI turnLabel;
     public Button btnMakeMove;
@@ -11,29 +13,25 @@ public class MatchUI : MonoBehaviour
 
     void Awake()
     {
-        // verrouille les clics tant que le réseau n'a pas spawn l'objet
-        btnMakeMove.interactable = false;
-        btnEndTurn.interactable  = false;
+        // Empêche tout clic avant que l'objet réseau soit prêt
+        SetButtonsInteractable(false);
     }
 
     void Start()
     {
-        // quand le TurnManager est spawné côté net, on branche tout
+        // Quand le TurnManager est "spawn" réseau, on branche les handlers
         turnManager.OnSpawned += OnTurnManagerReady;
 
-        // si on est déjà prêt (ex: Host), on branche tout de suite
+        // Si on est déjà prêt (cas Host), on branche tout de suite
         if (turnManager.IsReady) OnTurnManagerReady();
     }
 
-    void OnTurnManagerReady()
+    private void OnTurnManagerReady()
     {
         turnManager.OnStateChanged += Render;
 
         btnMakeMove.onClick.AddListener(() => turnManager.MakeMove());
         btnEndTurn.onClick.AddListener(() => turnManager.EndTurn());
-
-        btnMakeMove.interactable = true;
-        btnEndTurn.interactable  = true;
 
         Render(turnManager.State);
     }
@@ -41,6 +39,17 @@ public class MatchUI : MonoBehaviour
     private void Render(BoardState s)
     {
         string who = (s.activePlayer == 0) ? "Joueur 1" : "Joueur 2";
-        turnLabel.text = $"Tour {s.turnIndex} — {who}\nCoups: J1={s.movesP1}  J2={s.movesP2}";
+        turnLabel.text = $"Tour {s.turnIndex} — {who}\n" +
+                         $"Coups: J1={s.movesP1}  |  J2={s.movesP2}";
+
+        // Active les boutons uniquement si c'est mon tour
+        bool myTurn = turnManager.IsMyTurn(NetworkManager.Singleton.LocalClientId);
+        SetButtonsInteractable(myTurn);
+    }
+
+    private void SetButtonsInteractable(bool on)
+    {
+        if (btnMakeMove) btnMakeMove.interactable = on;
+        if (btnEndTurn)  btnEndTurn.interactable  = on;
     }
 }
