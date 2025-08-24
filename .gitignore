@@ -1,0 +1,127 @@
+# =============== #
+# Unity / General #
+# =============== #
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Mm]emoryCaptures/
+UserSettings/
+.vs/
+.vscode/
+.idea/
+
+# Unity Cache
+sysinfo.txt
+*.stacktrace
+*.pidb
+*.booproj
+*.svd
+*.userprefs
+*.csproj
+*.unityproj
+*.sln
+*.suo
+*.tmp
+*.user
+*.userosscache
+*.sln.docstates
+
+# =================== #
+# OS / IDE Artifacts  #
+# =================== #
+.DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+# =================== #
+# Build Artifacts     #
+# =================== #
+/[Bb]uild/
+[Bb]uilds/
+/[Bb]in/
+/[Dd]ebug*/
+/[Rr]elease*/
+
+# =================== #
+# Unity Cloud / Collab#
+# =================== #
+/UnityCloud/
+/Collab/
+
+# =================== #
+# Multiplayer / NGO   #
+# =================== #
+/MultiprocessBuild/
+*/MultiprocessTest/
+
+# =================== #
+# Addressables / Cache#
+# =================== #
+/ServerData/
+/LocalCache/
+/Addressables*/Build*/
+StreamingAssets/aa/*
+
+# =================== #
+# Generated Packages  #
+# =================== #
+/Packages/com.unity.collab-proxy/
+/Packages/com.unity.package-manager*
+
+# =================== #
+# Rider JetBrains     #
+# =================== #
+.idea/
+*.sln.iml
+
+# =================== #
+# Crash / Debug       #
+# =================== #
+crashreports/
+*.dmp
+
+# =================== #
+# Visual Studio       #
+# =================== #
+.vs/
+*.dbmdl
+*.bak
+*.bak2
+*.orig
+
+# =================== #
+# Android / iOS       #
+# =================== #
+/.gradle/
+/ExportedObj/
+/*.apk
+/*.aab
+*.obb
+/Pods/
+/DerivedData/
+/XcodeDerivedData/
+
+# =================== #
+# Profiling           #
+# =================== #
+*.profiler
+*.profiler.json
+*.trace
+
+# =================== #
+# TextMesh Pro        #
+# =================== #
+/Assets/TextMesh Pro/Resources/LineBreaking FollowingCharacters.txt
+/Assets/TextMesh Pro/Resources/LineBreaking LeadingCharacters.txt
+
+# =================== #
+# Rider & VS Cache    #
+# =================== #
+.idea/
+*.iml
+*.ipr
+*.iws
