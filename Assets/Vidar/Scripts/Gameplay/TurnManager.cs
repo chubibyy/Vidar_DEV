@@ -1,11 +1,16 @@
-using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
 using Unity.Netcode;
 
+/// <summary>
+/// Tour par tour autorité serveur (serveur dédié + 2 clients).
+/// - Le serveur maintient l'état et l'ordre des joueurs dans _players[0..1].
+/// - Les clients envoient leurs actions via ServerRpc.
+/// - Le serveur valide puis diffuse l'état via ClientRpc.
+/// </summary>
 public class TurnManager : NetworkBehaviour
 {
-    // --- Etat de jeu (simple) ---
+    // ---------- Etat de jeu ----------
     [System.Serializable]
     public class BoardState
     {
@@ -22,45 +27,43 @@ public class TurnManager : NetworkBehaviour
 
     public BoardState State { get; private set; }
 
-    // --- Sync: ordre des clients (2 joueurs) ---
-    // Serveur remplit _players[0] et _players[1] avec les clientId des deux joueurs.
-    private NetworkList<ulong> _players;
+    // ---------- Joueurs (répliqué par NGO) ----------
+    // IMPORTANT: NetworkList doit être instanciée à la déclaration (sinon erreur NGO).
+    private readonly NetworkList<ulong> _players = new NetworkList<ulong>();
 
-    // --- Hooks UI ---
+    // ---------- Hooks UI locaux (non réseau) ----------
     public System.Action<BoardState> OnStateChanged;
     public System.Action OnSpawned;
 
-    public bool IsReady { get; private set; } = false;
+    public bool IsReady { get; private set; }
 
-    void Awake()
+    private static readonly Encoding Utf8 = Encoding.UTF8;
+
+    private void Awake()
     {
+        // Valeur locale pour éviter le null côté client avant le premier sync
         State = BoardState.CreateInitial();
+        IsReady = false;
     }
 
     public override void OnNetworkSpawn()
     {
-        // Init NetworkList
-        _players = new NetworkList<ulong>();
         if (IsServer)
         {
-            // S'abonner aux connexions/déconnexions côté serveur
             NetworkManager.OnClientConnectedCallback += OnClientConnected;
             NetworkManager.OnClientDisconnectCallback += OnClientDisconnected;
 
-            // Clean si déjà rempli (cas de reload)
+            // Nettoie la liste en cas de reload serveur
             _players.Clear();
+
+            // Source de vérité initiale
+            State = BoardState.CreateInitial();
+            NotifyClientsClientRpc(Serialize(State)); // pousse vers les clients
+            NotifyLocal();                            // et met à jour local (monitoring serveur éventuel)
         }
 
         IsReady = true;
         OnSpawned?.Invoke();
-
-        if (IsServer)
-        {
-            // Le serveur est source de vérité : pousse l'état initial
-            State = BoardState.CreateInitial();
-            NotifyClientsClientRpc(Serialize(State));
-            NotifyLocal();
-        }
     }
 
     public override void OnNetworkDespawn()
@@ -69,29 +72,25 @@ public class TurnManager : NetworkBehaviour
         {
             NetworkManager.OnClientConnectedCallback -= OnClientConnected;
             NetworkManager.OnClientDisconnectCallback -= OnClientDisconnected;
+            _players.Clear();
         }
         IsReady = false;
     }
 
-    // -------- Connexions (serveur) --------
+    // ---------- Connexions (serveur) ----------
     private void OnClientConnected(ulong clientId)
     {
-        // Remplit l'ordre des joueurs (2 max). Le serveur n'est pas joueur.
+        // Enregistre jusqu'à 2 joueurs (serveur n'est pas joueur)
         if (_players.Count < 2)
         {
             _players.Add(clientId);
-            Debug.Log($"[Server] Client {clientId} enregistré en playerIndex={_players.Count - 1}");
+            Debug.Log($"[Server] Client {clientId} -> playerIndex={_players.Count - 1}");
 
-            // Quand les 2 joueurs sont là, on peut (optionnel) renvoyer un sync complet
-            if (_players.Count == 2)
-            {
-                // Reset/confirm état de départ si tu veux
-                NotifyClientsClientRpc(Serialize(State));
-            }
+            // Option: renvoyer l'état actuel (utile si un client arrive en cours)
+            NotifyClientsClientRpc(Serialize(State));
         }
         else
         {
-            // Partie pleine -> kick (ou spectateur si tu gères)
             Debug.Log("[Server] Partie pleine, on refuse un 3e client.");
             NetworkManager.DisconnectClient(clientId);
         }
@@ -99,7 +98,6 @@ public class TurnManager : NetworkBehaviour
 
     private void OnClientDisconnected(ulong clientId)
     {
-        // Libère le slot si un joueur part
         for (int i = 0; i < _players.Count; i++)
         {
             if (_players[i] == clientId)
@@ -108,63 +106,84 @@ public class TurnManager : NetworkBehaviour
                 break;
             }
         }
-        // Option: pause/abandon de partie ici
+        // TODO: gérer abandon, victoire auto, etc.
     }
 
-    // -------- API UI (appelée par le client local) --------
+    // ---------- API appelée par l'UI locale ----------
     public void MakeMove()
     {
         if (!IsReady) return;
-        if (!IsServer) MakeMoveServerRpc();
-        else           ApplyMove();           // utile si tu fais un client "loopback" local, mais ici le serveur n'est pas joueur
+
+        if (IsServer) ApplyMove();           // (utile si tu ajoutes plus tard un client local d'observation)
+        else          MakeMoveServerRpc();
     }
 
     public void EndTurn()
     {
         if (!IsReady) return;
-        if (!IsServer) EndTurnServerRpc();
-        else           ApplyEndTurn();
+
+        if (IsServer) ApplyEndTurn();
+        else          EndTurnServerRpc();
     }
 
-    // -------- RPC côté serveur --------
+    // ---------- RPC côté serveur ----------
     [ServerRpc(RequireOwnership = false)]
     private void MakeMoveServerRpc(ServerRpcParams rpc = default)
     {
-        if (!IsSenderActive(rpc)) return;   // sécurité tour
+        if (!IsLegalSender(rpc)) return;
         ApplyMove();
     }
 
     [ServerRpc(RequireOwnership = false)]
     private void EndTurnServerRpc(ServerRpcParams rpc = default)
     {
-        if (!IsSenderActive(rpc)) return;
+        if (!IsLegalSender(rpc)) return;
         ApplyEndTurn();
     }
 
-    private bool IsSenderActive(ServerRpcParams rpc)
+    private bool IsLegalSender(ServerRpcParams rpc)
     {
         var senderId = rpc.Receive.SenderClientId;
         int senderIndex = GetPlayerIndexFromClientId(senderId);
-        return senderIndex == State.activePlayer && senderIndex != -1;
+
+        // refuse si:
+        // - sender non mappé (-1)
+        // - pas son tour
+        // - (option) si les 2 joueurs ne sont pas encore connectés, autoriser seulement player 0
+        if (senderIndex == -1) return false;
+
+        // Empêche de jouer si l'adversaire n'est pas encore connecté (optionnel)
+        // if (_players.Count < 2 && senderIndex != 0) return false;
+
+        return senderIndex == State.activePlayer;
     }
 
-    // -------- Logique serveur --------
+    // ---------- Logique serveur ----------
     private void ApplyMove()
     {
-        if (State.activePlayer == 0) State.movesP1++; else State.movesP2++;
-        NotifyClientsClientRpc(Serialize(State));
-        NotifyLocal();
+        if (State.activePlayer == 0) State.movesP1++;
+        else                         State.movesP2++;
+
+        BroadcastState();
     }
 
     private void ApplyEndTurn()
     {
         State.turnIndex++;
         State.activePlayer = (State.activePlayer == 0) ? 1 : 0;
-        NotifyClientsClientRpc(Serialize(State));
+
+        BroadcastState();
+    }
+
+    private void BroadcastState()
+    {
+        // Diffuse l'état aux clients; le serveur met aussi à jour sa vue locale
+        var packed = Serialize(State);
+        NotifyClientsClientRpc(packed);
         NotifyLocal();
     }
 
-    // -------- Utils joueurs --------
+    // ---------- Helpers joueurs ----------
     public bool IsMyTurn()
     {
         if (!IsReady) return false;
@@ -174,22 +193,24 @@ public class TurnManager : NetworkBehaviour
 
     private int GetLocalPlayerIndex()
     {
-        if (_players == null || _players.Count == 0) return -1;
-        ulong me = NetworkManager.LocalClientId;   // côté client
+        if (_players.Count == 0) return -1;
+
+        ulong me = NetworkManager.LocalClientId; // côté client
         for (int i = 0; i < _players.Count; i++)
             if (_players[i] == me) return i;
+
         return -1;
     }
 
     private int GetPlayerIndexFromClientId(ulong clientId)
     {
-        if (_players == null) return -1;
         for (int i = 0; i < _players.Count; i++)
             if (_players[i] == clientId) return i;
+
         return -1;
     }
 
-    // -------- Sync vers clients --------
+    // ---------- Sync vers clients ----------
     [ClientRpc]
     private void NotifyClientsClientRpc(byte[] packed)
     {
@@ -199,16 +220,16 @@ public class TurnManager : NetworkBehaviour
 
     private void NotifyLocal() => OnStateChanged?.Invoke(State);
 
-    // -------- Sérialisation simple --------
+    // ---------- Sérialisation (simple, Unity) ----------
     private static byte[] Serialize(BoardState s)
     {
         string json = JsonUtility.ToJson(s);
-        return Encoding.UTF8.GetBytes(json);
+        return Utf8.GetBytes(json);
     }
 
     private static BoardState Deserialize(byte[] b)
     {
-        string json = Encoding.UTF8.GetString(b);
+        string json = Utf8.GetString(b);
         return JsonUtility.FromJson<BoardState>(json);
     }
 }
