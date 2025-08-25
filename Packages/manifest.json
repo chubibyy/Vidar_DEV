@@ -1,5 +1,8 @@
 {
   "dependencies": {
+    "com.unity.ai.assistant": "1.0.0-pre.12",
+    "com.unity.ai.generators": "1.0.0-pre.19",
+    "com.unity.ai.inference": "2.3.0",
     "com.unity.collab-proxy": "2.9.2",
     "com.unity.dedicated-server": "1.6.0",
     "com.unity.feature.mobile": "1.0.0",

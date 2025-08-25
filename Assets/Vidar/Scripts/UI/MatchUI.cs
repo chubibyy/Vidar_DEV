@@ -5,7 +5,9 @@ using Unity.Netcode;
 
 public class MatchUI : MonoBehaviour
 {
-    [Header("Refs")]
+    // Champs optionnels : si tu ne les renseignes pas dans l'Inspector,
+    // le script les retrouvera automatiquement au Start().
+    [Header("Optional (auto-detected if null)")]
     public TurnManager turnManager;
     public TextMeshProUGUI turnLabel;
     public Button btnMakeMove;
@@ -13,43 +15,87 @@ public class MatchUI : MonoBehaviour
 
     void Awake()
     {
-        // Empêche tout clic avant que l'objet réseau soit prêt
-        SetButtonsInteractable(false);
+        // Au cas où l'UI apparaisse avant la connexion réseau
+        SetButtons(false);
     }
 
     void Start()
     {
-        // Quand le TurnManager est "spawn" réseau, on branche les handlers
-        turnManager.OnSpawned += OnTurnManagerReady;
+        // ---- Auto-detect des références manquantes ----
+        if (turnManager == null)
+            turnManager = Object.FindAnyObjectByType<TurnManager>(FindObjectsInactive.Include);
 
-        // Si on est déjà prêt (cas Host), on branche tout de suite
-        if (turnManager.IsReady) OnTurnManagerReady();
-    }
+        if (turnLabel == null)
+            turnLabel = GetComponentInChildren<TextMeshProUGUI>(includeInactive: true);
 
-    private void OnTurnManagerReady()
-    {
+        if (btnMakeMove == null)
+            btnMakeMove = FindButtonByNameContains("MakeMove") ?? FindButtonByTextContains("Jouer");
+
+        if (btnEndTurn == null)
+            btnEndTurn  = FindButtonByNameContains("EndTurn")  ?? FindButtonByTextContains("End");
+
+        // Sécurise : si on n'a toujours pas les refs, on log et on sort proprement
+        if (turnManager == null)
+        {
+            Debug.LogError("[MatchUI] TurnManager introuvable dans la scène.");
+            return;
+        }
+        if (turnLabel == null)  Debug.LogWarning("[MatchUI] turnLabel introuvable (texte d'état non affiché).");
+        if (btnMakeMove == null) Debug.LogWarning("[MatchUI] btnMakeMove introuvable.");
+        if (btnEndTurn == null)  Debug.LogWarning("[MatchUI] btnEndTurn introuvable.");
+
+        // ---- Branchement des événements par code ----
+        if (btnMakeMove != null) btnMakeMove.onClick.AddListener(OnClickMakeMove);
+        if (btnEndTurn  != null) btnEndTurn .onClick.AddListener(OnClickEndTurn);
+
+        // Render à chaque changement d'état
         turnManager.OnStateChanged += Render;
 
-        btnMakeMove.onClick.AddListener(() => turnManager.MakeMove());
-        btnEndTurn.onClick.AddListener(() => turnManager.EndTurn());
-
+        // Premier rendu
         Render(turnManager.State);
     }
 
-    private void Render(BoardState s)
-    {
-        string who = (s.activePlayer == 0) ? "Joueur 1" : "Joueur 2";
-        turnLabel.text = $"Tour {s.turnIndex} — {who}\n" +
-                         $"Coups: J1={s.movesP1}  |  J2={s.movesP2}";
+    // --- Callbacks Boutons ---
+    public void OnClickMakeMove() => turnManager.MakeMove();
+    public void OnClickEndTurn()  => turnManager.EndTurn();
 
-        // Active les boutons uniquement si c'est mon tour
-        bool myTurn = turnManager.IsMyTurn(NetworkManager.Singleton.LocalClientId);
-        SetButtonsInteractable(myTurn);
+    // --- Rendu UI ---
+    private void Render(TurnManager.BoardState s)
+    {
+        if (turnLabel != null)
+        {
+            string who = (s.activePlayer == 0) ? "Joueur 1" : "Joueur 2";
+            turnLabel.text = $"Tour {s.turnIndex} — {who}\n" +
+                             $"Coups: J1={s.movesP1} | J2={s.movesP2}";
+        }
+
+        bool myTurn = turnManager.IsMyTurn();
+        SetButtons(myTurn);
     }
 
-    private void SetButtonsInteractable(bool on)
+    private void SetButtons(bool on)
     {
-        if (btnMakeMove) btnMakeMove.interactable = on;
-        if (btnEndTurn)  btnEndTurn.interactable  = on;
+        if (btnMakeMove != null) btnMakeMove.interactable = on;
+        if (btnEndTurn  != null) btnEndTurn .interactable = on;
+    }
+
+    // --- Helpers pour retrouver des boutons ---
+    private Button FindButtonByNameContains(string contains)
+    {
+        foreach (var b in GetComponentsInChildren<Button>(includeInactive: true))
+            if (b.name.ToLower().Contains(contains.ToLower()))
+                return b;
+        return null;
+    }
+
+    private Button FindButtonByTextContains(string contains)
+    {
+        foreach (var b in GetComponentsInChildren<Button>(includeInactive: true))
+        {
+            var txt = b.GetComponentInChildren<TMP_Text>(includeInactive: true);
+            if (txt != null && txt.text.ToLower().Contains(contains.ToLower()))
+                return b;
+        }
+        return null;
     }
 }
