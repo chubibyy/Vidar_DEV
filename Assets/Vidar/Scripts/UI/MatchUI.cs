@@ -14,6 +14,7 @@ public class MatchUI : MonoBehaviour
     public TextMeshProUGUI turnLabel;
     public Button btnMakeMove;
     public Button btnEndTurn;
+    private CameraRig _camRig;
 
     [Header("Debug")]
     public bool forceInteractableForDebug = false;
@@ -35,7 +36,7 @@ public class MatchUI : MonoBehaviour
         if (btnMakeMove == null)
             btnMakeMove = FindButtonByNameContains("MakeMove") ?? FindButtonByTextContains("jouer");
         if (btnEndTurn == null)
-            btnEndTurn  = FindButtonByNameContains("EndTurn")  ?? FindButtonByTextContains("end");
+            btnEndTurn = FindButtonByNameContains("EndTurn") ?? FindButtonByTextContains("end");
 
         if (turnManager == null)
         {
@@ -44,10 +45,12 @@ public class MatchUI : MonoBehaviour
         }
 
         if (btnMakeMove != null) btnMakeMove.onClick.AddListener(OnClickMakeMove);
-        if (btnEndTurn  != null) btnEndTurn .onClick.AddListener(OnClickEndTurn);
+        if (btnEndTurn != null) btnEndTurn.onClick.AddListener(OnClickEndTurn);
 
         turnManager.OnStateChanged += Render;
         Render(turnManager.State);
+        
+        if (_camRig == null) _camRig = Object.FindAnyObjectByType<CameraRig>(FindObjectsInactive.Include);
     }
 
     // --- Boutons ---
@@ -82,6 +85,8 @@ public class MatchUI : MonoBehaviour
         }
 
         SetButtons(myTurn);
+
+        if (!myTurn && _camRig != null) _camRig.SetMode(CameraRig.Mode.Master);
     }
 
     private void SetButtons(bool on)

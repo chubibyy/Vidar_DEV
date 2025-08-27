@@ -10,6 +10,18 @@ using Unity.Netcode;
 /// </summary>
 public class TurnManager : NetworkBehaviour
 {
+    // Ajoute une table de cartes (simple) — dans un vrai projet, passe par un registry/DB
+    [Header("Cards Registry")]
+    [SerializeField] private CardDefinition[] allCards;    // renseigne dans l’inspector
+    [SerializeField] private Transform spawnZoneP1;        // refs dans la scène MVP
+    [SerializeField] private Transform spawnZoneP2;
+
+    // Pour retrouver la CardDefinition depuis un cardId
+    private CardDefinition GetCard(int id)
+    {
+        foreach (var c in allCards) if (c != null && c.cardId == id) return c;
+        return null;
+    }
     // ---------- Etat de jeu ----------
     [System.Serializable]
     public class BoardState
@@ -157,12 +169,77 @@ public class TurnManager : NetworkBehaviour
 
         return senderIndex == State.activePlayer;
     }
+    
+    [ServerRpc(RequireOwnership = false)]
+    public void PlaceHeroServerRpc(int cardId, Vector3 requestedPos, ServerRpcParams rpc = default)
+    {
+        var sender = rpc.Receive.SenderClientId;
+        int pIndex = GetPlayerIndexFromClientId(sender);
+        if (pIndex == -1 || pIndex != State.activePlayer) return; // seulement le joueur actif
+
+        // Valide la position (doit être dans la zone de spawn du joueur pIndex)
+        if (!IsInsideSpawnZone(requestedPos, pIndex)) return;
+
+        var card = GetCard(cardId);
+        if (card == null || card.heroPrefab == null) return;
+
+        // Instancie le héros, spawn réseau, ownership -> joueur
+        var go = Instantiate(card.heroPrefab, requestedPos, Quaternion.identity);
+        var no = go.GetComponent<NetworkObject>();
+        if (no == null) { Destroy(go); return; }
+
+        no.Spawn();                 // serveur crée l'objet réseau
+        no.ChangeOwnership(sender); // donne la possession au client
+
+        // Demande au client concerné de passer sa cam en TPS et suivre ce héros
+        FocusHeroClientRpc(no.NetworkObjectId, new ClientRpcParams {
+            Send = new ClientRpcSendParams { TargetClientIds = new[] { sender } }
+        });
+
+        // (Option) marquer la carte comme consommée, mettre à jour l'état, etc.
+        BroadcastState();
+    }
+
+    private bool IsInsideSpawnZone(Vector3 pos, int playerIndex)
+    {
+        var tz = (playerIndex == 0) ? spawnZoneP1 : spawnZoneP2;
+        if (tz == null) return false;
+
+        // On prend le BoxCollider de la zone
+        var bc = tz.GetComponent<BoxCollider>();
+        if (bc == null) return false;
+
+        // test point-in-box en coordonnées locales
+        var lp = tz.InverseTransformPoint(pos);
+        return Mathf.Abs(lp.x) <= bc.size.x * 0.5f &&
+            Mathf.Abs(lp.y) <= bc.size.y * 0.5f &&
+            Mathf.Abs(lp.z) <= bc.size.z * 0.5f;
+    }
+
+    [ClientRpc]
+    private void FocusHeroClientRpc(ulong heroNetId, ClientRpcParams target = default)
+    {
+        // côté client: passer la caméra en TPS, suivre le héros
+        var nm = NetworkManager.Singleton;
+        if (nm == null || !nm.SpawnManager.SpawnedObjects.TryGetValue(heroNetId, out var netObj)) return;
+
+        var hero = netObj.transform;
+
+        var camRig = FindAnyObjectByType<CameraRig>(FindObjectsInactive.Include);
+        if (camRig != null)
+        {
+            camRig.Follow(hero);
+            camRig.SetMode(CameraRig.Mode.TPS);
+        }
+    }
+
+
 
     // ---------- Logique serveur ----------
     private void ApplyMove()
     {
         if (State.activePlayer == 0) State.movesP1++;
-        else                         State.movesP2++;
+        else State.movesP2++;
 
         BroadcastState();
     }

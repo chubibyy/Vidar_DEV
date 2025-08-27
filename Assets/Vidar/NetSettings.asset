@@ -13,7 +13,6 @@ MonoBehaviour:
   m_Name: NetSettings
   m_EditorClassIdentifier: Assembly-CSharp::NetSettings
   serverAddress: 127.0.0.1
-  port: 7979
+  port: 7983
   serverListenAddress: 0.0.0.0
   useWebSockets: 0
-  allowRemoteConnections: 0
