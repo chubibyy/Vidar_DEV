@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 using Unity.Netcode;
 #if ENABLE_INPUT_SYSTEM
@@ -10,14 +11,14 @@ public class CameraRig : MonoBehaviour
 
     [Header("References")]
     [SerializeField] private Camera cam;
-    public Camera Cam => cam; // exposée en lecture seule
+    public Camera Cam => cam;
 
     [Header("Master View")]
     [SerializeField] private Transform masterPivotP1; // côté joueur 0
     [SerializeField] private Transform masterPivotP2; // côté joueur 1
     [Range(1f,100f)] public float masterMoveSpeed = 25f;
     [Range(50f,800f)] public float masterZoomSpeed = 300f;
-    [Range(5f,50f)] public float defaultMasterDistance = 18f;
+    [Range(5f,50f)]  public float defaultMasterDistance = 18f;
     [Range(20f,80f)] public float masterLookAngle = 45f;
 
     [Header("TPS View")]
@@ -47,27 +48,55 @@ public class CameraRig : MonoBehaviour
         _isDedicatedServer = nm && nm.IsServer && !nm.IsClient; // serveur dédié pur
     }
 
-    void Start()
+    void OnEnable()
     {
+        // (ré)initialisation à chaque chargement de scène
+        StartCoroutine(InitWhenReady());
+    }
+
+    IEnumerator InitWhenReady()
+    {
+        _initialized = false;
+
         if (_isDedicatedServer)
         {
             if (!enableServerObserver)
             {
                 cam.enabled = false;
                 enabled = false;
-                return;
+                yield break;
             }
             _currentMasterPivot = masterPivotP1;
             SetMode(Mode.Master);
             SnapToMasterPivot();
             _initialized = true;
-            return;
+            yield break;
         }
 
-        // CLIENT
-        var tm = FindAnyObjectByType<TurnManager>(FindObjectsInactive.Include);
-        int idx = (tm != null) ? Mathf.Clamp(tm.GetLocalPlayerIndexPublic(), 0, 1) : 0;
-        _currentMasterPivot = (idx == 1) ? masterPivotP2 : masterPivotP1;
+        // CLIENT : attendre que TurnManager existe ET que l'index local soit connu
+        TurnManager tm = null;
+        int localIdx = -1;
+
+        // attend que le TM soit présent
+        while (tm == null)
+        {
+            tm = FindAnyObjectByType<TurnManager>(FindObjectsInactive.Include);
+            yield return null;
+        }
+
+        // attend que la liste des joueurs soit répliquée (index != -1)
+        var timeout = 3f; // sécurité (3s max)
+        while (timeout > 0f)
+        {
+            localIdx = tm.GetLocalPlayerIndexPublic();
+            if (localIdx >= 0) break;
+            timeout -= Time.unscaledDeltaTime;
+            yield return null;
+        }
+        if (localIdx < 0) localIdx = 0; // fallback doux
+
+        // Choisit le bon pivot selon l'index
+        _currentMasterPivot = (localIdx == 1) ? masterPivotP2 : masterPivotP1;
 
         SetMode(Mode.Master);
         SnapToMasterPivot();
@@ -186,5 +215,12 @@ public class CameraRig : MonoBehaviour
         if (!target) return;
         _tpsFollowTarget = target;
         _mode = Mode.TPS;
+    }
+
+    /// <summary>Si besoin, tu peux forcer un refresh manuel (ex: après reconnection).</summary>
+    public void RefreshSide()
+    {
+        StopAllCoroutines();
+        StartCoroutine(InitWhenReady());
     }
 }
