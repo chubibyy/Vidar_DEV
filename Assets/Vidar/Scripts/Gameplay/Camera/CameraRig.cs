@@ -1,4 +1,5 @@
 using UnityEngine;
+using Unity.Netcode;
 #if ENABLE_INPUT_SYSTEM
 using UnityEngine.InputSystem;
 #endif
@@ -7,122 +8,183 @@ public class CameraRig : MonoBehaviour
 {
     public enum Mode { Master, TPS }
 
-    [Header("Links")]
-    public Camera cam;
+    [Header("References")]
+    [SerializeField] private Camera cam;
+    public Camera Cam => cam; // exposée en lecture seule
 
     [Header("Master View")]
-    public Transform masterPivotP1;
-    public Transform masterPivotP2;
-    [Range(1f, 100f)] public float masterMoveSpeed = 25f;
-    [Range(50f, 800f)] public float masterZoomSpeed = 300f;
+    [SerializeField] private Transform masterPivotP1; // côté joueur 0
+    [SerializeField] private Transform masterPivotP2; // côté joueur 1
+    [Range(1f,100f)] public float masterMoveSpeed = 25f;
+    [Range(50f,800f)] public float masterZoomSpeed = 300f;
+    [Range(5f,50f)] public float defaultMasterDistance = 18f;
+    [Range(20f,80f)] public float masterLookAngle = 45f;
 
     [Header("TPS View")]
-    public Vector3 tpsOffset = new Vector3(0f, 2.0f, -4f);
-    [Range(1f, 30f)] public float followLerp = 10f;
+    public Vector3 tpsOffset = new Vector3(0f, 2f, -4f);
+    [Range(1f,30f)] public float followLerp = 10f;
+
+    [Header("Server Options")]
+    public bool enableServerObserver = false;
 
     private Mode _mode = Mode.Master;
     private Transform _currentMasterPivot;
     private Transform _tpsFollowTarget;
+    private float _currentZoomDist;
+
+    private bool _isDedicatedServer;
+    private bool _initialized;
+
+    void Awake()
+    {
+        if (!cam) cam = Camera.main;
+        if (!cam) { Debug.LogError("[CameraRig] Aucune Camera trouvée."); enabled = false; return; }
+        if (!masterPivotP1 || !masterPivotP2) { Debug.LogError("[CameraRig] Master pivots non assignés."); enabled = false; return; }
+
+        _currentZoomDist = defaultMasterDistance;
+
+        var nm = NetworkManager.Singleton;
+        _isDedicatedServer = nm && nm.IsServer && !nm.IsClient; // serveur dédié pur
+    }
 
     void Start()
     {
-        if (!cam) cam = Camera.main;
+        if (_isDedicatedServer)
+        {
+            if (!enableServerObserver)
+            {
+                cam.enabled = false;
+                enabled = false;
+                return;
+            }
+            _currentMasterPivot = masterPivotP1;
+            SetMode(Mode.Master);
+            SnapToMasterPivot();
+            _initialized = true;
+            return;
+        }
 
-        // Choix auto du pivot master selon le côté local
+        // CLIENT
         var tm = FindAnyObjectByType<TurnManager>(FindObjectsInactive.Include);
-        int me = (tm != null) ? tm.IsReady ? tm.IsMyTurn() ? tm.IsMyTurn() ? 0 : 0 : 0 : 0 : 0; // dummy to silence analyzer (we'll set properly below)
-        if (tm != null)
-        {
-            // si le local est player 0 → pivot P1, sinon P2
-            int localIndex = -1;
-            // méthode utilitaire interne du TM
-            var getIdx = tm.GetType().GetMethod("GetLocalPlayerIndex", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-            if (getIdx != null) localIndex = (int)getIdx.Invoke(tm, null);
-
-            _currentMasterPivot = (localIndex == 1) ? masterPivotP2 : masterPivotP1;
-        }
-        else
-        {
-            _currentMasterPivot = masterPivotP1 ? masterPivotP1 : masterPivotP2;
-        }
+        int idx = (tm != null) ? Mathf.Clamp(tm.GetLocalPlayerIndexPublic(), 0, 1) : 0;
+        _currentMasterPivot = (idx == 1) ? masterPivotP2 : masterPivotP1;
 
         SetMode(Mode.Master);
         SnapToMasterPivot();
+        _initialized = true;
     }
 
     void LateUpdate()
     {
-        if (!cam) return;
+        if (!_initialized) return;
+        if (_mode == Mode.TPS) UpdateTPS();
+        else UpdateMaster();
+    }
 
-        if (_mode == Mode.TPS)
-        {
-            if (_tpsFollowTarget)
-            {
-                Vector3 targetPos = _tpsFollowTarget.position + tpsOffset;
-                cam.transform.position = Vector3.Lerp(cam.transform.position, targetPos, Time.deltaTime * followLerp);
-                cam.transform.LookAt(_tpsFollowTarget.position + Vector3.up * 1.2f);
-            }
-        }
-        else // Master
-        {
+    // ---------- Master ----------
+    private void UpdateMaster()
+    {
+        if (!_currentMasterPivot) return;
+
 #if ENABLE_INPUT_SYSTEM
-            var kb = Keyboard.current;
-            var ms = Mouse.current;
+        var kb = Keyboard.current;
+        var mouse = Mouse.current;
 
-            Vector3 move = Vector3.zero;
-            if (kb != null)
-            {
-                if (kb.aKey.isPressed || kb.leftArrowKey.isPressed)  move.x -= 1f;
-                if (kb.dKey.isPressed || kb.rightArrowKey.isPressed) move.x += 1f;
-                if (kb.wKey.isPressed || kb.upArrowKey.isPressed)    move.z += 1f;
-                if (kb.sKey.isPressed || kb.downArrowKey.isPressed)  move.z -= 1f;
-            }
-
-            if (_currentMasterPivot) _currentMasterPivot.position += move.normalized * masterMoveSpeed * Time.deltaTime;
-
-            if (ms != null)
-            {
-                float scroll = ms.scroll.ReadValue().y; // lignes
-                cam.transform.position += cam.transform.forward * (scroll * 0.01f) * masterZoomSpeed * Time.deltaTime;
-            }
-
-            if (_currentMasterPivot)
-                cam.transform.LookAt(_currentMasterPivot.position);
-#endif
-        }
-    }
-
-    public void SetMode(Mode m)
-    {
-        _mode = m;
-        if (_mode == Mode.Master)
+        if (kb != null)
         {
-            _tpsFollowTarget = null;
-            if (_currentMasterPivot) cam.transform.LookAt(_currentMasterPivot.position);
+            Vector3 move = Vector3.zero;
+            if (kb.aKey.isPressed || kb.leftArrowKey.isPressed)  move.x -= 1f;
+            if (kb.dKey.isPressed || kb.rightArrowKey.isPressed) move.x += 1f;
+            if (kb.wKey.isPressed || kb.upArrowKey.isPressed)    move.z += 1f;
+            if (kb.sKey.isPressed || kb.downArrowKey.isPressed)  move.z -= 1f;
+
+            if (move.sqrMagnitude > 0.01f)
+                _currentMasterPivot.position += move.normalized * masterMoveSpeed * Time.deltaTime;
+
+            if (kb.rKey.wasPressedThisFrame)
+                SnapToMasterPivot();
         }
+
+        if (mouse != null)
+        {
+            float scroll = mouse.scroll.ReadValue().y;
+            if (Mathf.Abs(scroll) > 0.01f)
+            {
+                _currentZoomDist = Mathf.Clamp(_currentZoomDist - (scroll * 0.1f) * masterZoomSpeed * Time.deltaTime, 5f, 50f);
+                PositionMasterCamera();
+            }
+        }
+#else
+        float h = Input.GetAxis("Horizontal");
+        float v = Input.GetAxis("Vertical");
+        Vector3 move = new Vector3(h,0,v);
+        if (move.sqrMagnitude > 0.01f)
+            _currentMasterPivot.position += move.normalized * masterMoveSpeed * Time.deltaTime;
+
+        float scroll = Input.GetAxis("Mouse ScrollWheel");
+        if (Mathf.Abs(scroll) > 0.01f)
+        {
+            _currentZoomDist = Mathf.Clamp(_currentZoomDist - scroll * masterZoomSpeed * Time.deltaTime, 5f, 50f);
+            PositionMasterCamera();
+        }
+
+        if (Input.GetKeyDown(KeyCode.R)) SnapToMasterPivot();
+#endif
+        MaintainMasterLookAt();
     }
 
-    public void Follow(Transform target)
+    private void PositionMasterCamera()
     {
-        _tpsFollowTarget = target;
-        _mode = Mode.TPS;
+        if (!_currentMasterPivot || !cam) return;
+        float ang = masterLookAngle * Mathf.Deg2Rad;
+        float hDist = _currentZoomDist * Mathf.Cos(ang);
+        float vDist = _currentZoomDist * Mathf.Sin(ang);
+        Vector3 offset = new Vector3(0f, vDist, -hDist);
+        cam.transform.position = _currentMasterPivot.position + offset;
+        cam.transform.LookAt(_currentMasterPivot.position);
     }
 
-    public void SetMasterPivotForPlayer(int playerIndex)
+    private void MaintainMasterLookAt()
     {
-        _currentMasterPivot = (playerIndex == 1) ? masterPivotP2 : masterPivotP1;
+        if (!_currentMasterPivot || !cam) return;
+        Vector3 lookDir = _currentMasterPivot.position - cam.transform.position;
+        if (lookDir.sqrMagnitude > 0.0001f)
+        {
+            Quaternion t = Quaternion.LookRotation(lookDir);
+            cam.transform.rotation = Quaternion.Slerp(cam.transform.rotation, t, Time.deltaTime * 5f);
+        }
     }
 
     public void SnapToMasterPivot()
     {
-        if (_currentMasterPivot)
-        {
-            // place la caméra à une distance correcte et regarde le pivot
-            Vector3 dir = (cam.transform.position - _currentMasterPivot.position).normalized;
-            if (dir.sqrMagnitude < 0.01f) dir = new Vector3(0, 1, -1).normalized;
-            float dist = 15f;
-            cam.transform.position = _currentMasterPivot.position + dir * dist;
-            cam.transform.LookAt(_currentMasterPivot.position);
-        }
+        _currentZoomDist = defaultMasterDistance;
+        PositionMasterCamera();
+    }
+
+    // ---------- TPS ----------
+    private void UpdateTPS()
+    {
+        if (!_tpsFollowTarget || !cam) { SetMode(Mode.Master); return; }
+
+        Vector3 targetPos = _tpsFollowTarget.position + _tpsFollowTarget.TransformDirection(tpsOffset);
+        cam.transform.position = Vector3.Lerp(cam.transform.position, targetPos, Time.deltaTime * followLerp);
+
+        Vector3 look = _tpsFollowTarget.position + Vector3.up * 1.2f;
+        Quaternion rot = Quaternion.LookRotation(look - cam.transform.position);
+        cam.transform.rotation = Quaternion.Slerp(cam.transform.rotation, rot, Time.deltaTime * followLerp);
+    }
+
+    // ---------- API ----------
+    public void SetMode(Mode m)
+    {
+        _mode = m;
+        if (_mode == Mode.Master) _tpsFollowTarget = null;
+    }
+
+    public void Follow(Transform target)
+    {
+        if (!target) return;
+        _tpsFollowTarget = target;
+        _mode = Mode.TPS;
     }
 }

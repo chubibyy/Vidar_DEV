@@ -4,7 +4,7 @@ using UnityEngine.UI;
 using UnityEngine.EventSystems;
 using Unity.Netcode;
 #if ENABLE_INPUT_SYSTEM
-using UnityEngine.InputSystem.UI;   // <- nouveau module UI (Input System)
+using UnityEngine.InputSystem.UI;   // nouveau module UI (Input System)
 #endif
 
 public class MatchUI : MonoBehaviour
@@ -41,24 +41,40 @@ public class MatchUI : MonoBehaviour
         if (turnManager == null)
         {
             Debug.LogError("[MatchUI] TurnManager introuvable.");
+            enabled = false;
             return;
         }
 
-        if (btnMakeMove != null) btnMakeMove.onClick.AddListener(OnClickMakeMove);
-        if (btnEndTurn != null) btnEndTurn.onClick.AddListener(OnClickEndTurn);
+        if (_camRig == null)
+            _camRig = Object.FindAnyObjectByType<CameraRig>(FindObjectsInactive.Include);
 
+        if (btnMakeMove != null) btnMakeMove.onClick.AddListener(OnClickMakeMove);
+        if (btnEndTurn  != null) btnEndTurn .onClick.AddListener(OnClickEndTurn);
+
+        // Ecoute les changements d’état
         turnManager.OnStateChanged += Render;
+
+        // Premier rendu
         Render(turnManager.State);
-        
-        if (_camRig == null) _camRig = Object.FindAnyObjectByType<CameraRig>(FindObjectsInactive.Include);
+    }
+
+    void OnDestroy()
+    {
+        if (turnManager != null)
+            turnManager.OnStateChanged -= Render;
+
+        if (btnMakeMove != null) btnMakeMove.onClick.RemoveListener(OnClickMakeMove);
+        if (btnEndTurn  != null) btnEndTurn .onClick.RemoveListener(OnClickEndTurn);
     }
 
     // --- Boutons ---
     public void OnClickMakeMove()
     {
         if (verboseLogs) Debug.Log("[MatchUI] Click MakeMove");
+        // côté serveur : TurnManager.MakeMove() ne fait rien (nous avons blindé côté TM)
         turnManager.MakeMove();
     }
+
     public void OnClickEndTurn()
     {
         if (verboseLogs) Debug.Log("[MatchUI] Click EndTurn");
@@ -66,9 +82,11 @@ public class MatchUI : MonoBehaviour
     }
 
     // --- Rendu / Interactabilité ---
-    private void Render(TurnManager.BoardState s)
+    // IMPORTANT : BoardState est maintenant un type global (fichier séparé),
+    // pas TurnManager.BoardState
+    private void Render(BoardState s)
     {
-        if (turnLabel != null)
+        if (turnLabel != null && s != null)
         {
             string who = (s.activePlayer == 0) ? "Joueur 1" : "Joueur 2";
             turnLabel.text = $"Tour {s.turnIndex} — {who}\nCoups: J1={s.movesP1} | J2={s.movesP2}";
@@ -79,13 +97,17 @@ public class MatchUI : MonoBehaviour
 
         if (verboseLogs)
         {
-            string mode = NetworkManager.Singleton != null && NetworkManager.Singleton.IsServer ? "Server"
-                        : NetworkManager.Singleton != null && NetworkManager.Singleton.IsClient ? "Client" : "Unknown";
+            string mode =
+                NetworkManager.Singleton != null && NetworkManager.Singleton.IsServer && !NetworkManager.Singleton.IsClient ? "Server(DED)"
+              : NetworkManager.Singleton != null && NetworkManager.Singleton.IsClient ? "Client"
+              : "Unknown";
             Debug.Log($"[MatchUI] Mode={mode} | IsReady={turnManager.IsReady} | MyTurn={myTurn}");
         }
 
-        SetButtons(myTurn);
+        // Activer les boutons seulement côté client et à son tour
+        SetButtons(myTurn && NetworkManager.Singleton != null && NetworkManager.Singleton.IsClient);
 
+        // Revenir en vue Master quand ce n'est plus mon tour
         if (!myTurn && _camRig != null) _camRig.SetMode(CameraRig.Mode.Master);
     }
 
@@ -102,14 +124,12 @@ public class MatchUI : MonoBehaviour
         if (es == null)
             es = new GameObject("EventSystem").AddComponent<EventSystem>();
 
-        // Si le nouveau système d’input est actif, utiliser InputSystemUIInputModule
         #if ENABLE_INPUT_SYSTEM
         var legacy = es.GetComponent<StandaloneInputModule>();
         if (legacy) Destroy(legacy);
         if (!es.TryGetComponent<InputSystemUIInputModule>(out _))
             es.gameObject.AddComponent<InputSystemUIInputModule>();
         #else
-        // Sinon (Legacy ou Both), s’assurer d’avoir StandaloneInputModule
         if (!es.TryGetComponent<StandaloneInputModule>(out _))
             es.gameObject.AddComponent<StandaloneInputModule>();
         #endif

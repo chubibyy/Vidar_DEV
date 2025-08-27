@@ -2,14 +2,14 @@ using UnityEngine;
 using Unity.Netcode;
 using UnityEngine.EventSystems;
 #if ENABLE_INPUT_SYSTEM
-using UnityEngine.InputSystem; // Mouse.current, etc.
+using UnityEngine.InputSystem;
 #endif
 
 public class PlacementClient : MonoBehaviour
 {
     public PlayerDeck deck;
     public CameraRig cameraRig;
-    public LayerMask placementMask = ~0; // couche du sol
+    public LayerMask placementMask = ~0;
     public Transform spawnZoneP1;
     public Transform spawnZoneP2;
 
@@ -17,47 +17,49 @@ public class PlacementClient : MonoBehaviour
 
     void Update()
     {
-        if (_selectedCard == null || cameraRig == null || cameraRig.cam == null) return;
-        if (IsPointerOverUI()) return; // évite les clics sur l'UI
+        if (_selectedCard == null || cameraRig == null || cameraRig.Cam == null) return;
+        if (IsPointerOverUI()) return;
 
-        // === New Input System ===
-        #if ENABLE_INPUT_SYSTEM
+#if ENABLE_INPUT_SYSTEM
         if (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
         {
             Vector2 pos = Mouse.current.position.ReadValue();
-            var ray = cameraRig.cam.ScreenPointToRay(pos);
+            var ray = cameraRig.Cam.ScreenPointToRay(pos);
             TryPlaceAtRay(ray);
         }
-        #else
-        // === Legacy / Both ===
+#else
         if (Input.GetMouseButtonDown(0))
         {
-            var ray = cameraRig.cam.ScreenPointToRay(Input.mousePosition);
+            var ray = cameraRig.Cam.ScreenPointToRay(Input.mousePosition);
             TryPlaceAtRay(ray);
         }
-        #endif
+#endif
     }
 
     private void TryPlaceAtRay(Ray ray)
     {
         if (Physics.Raycast(ray, out var hit, 500f, placementMask))
         {
+            Debug.Log($"[Placement] Ray hit {hit.collider.name} @ {hit.point}");
             var tm = FindAnyObjectByType<TurnManager>(FindObjectsInactive.Include);
             if (tm != null)
             {
+                Debug.Log($"[Placement] send PlaceHeroServerRpc card={_selectedCard?.cardId}");
                 tm.PlaceHeroServerRpc(_selectedCard.cardId, hit.point);
-                _selectedCard = null; // on sort du mode placement (une carte = un placement)
+                _selectedCard = null;
             }
+        }
+        else
+        {
+            Debug.Log("[Placement] Raycast n’a rien touché (sol sans collider ? layer mask ?)");
         }
     }
 
     private bool IsPointerOverUI()
     {
-        // Suffisant avec InputSystemUIInputModule comme avec StandaloneInputModule
         return EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
     }
 
-    // Appelé par les boutons de cartes (index 0..4)
     public void SelectCardByIndex(int index)
     {
         if (deck == null || deck.startingCards == null) return;
@@ -65,8 +67,7 @@ public class PlacementClient : MonoBehaviour
 
         _selectedCard = deck.startingCards[index];
         Debug.Log($"[Placement] Carte sélectionnée: {_selectedCard.displayName}");
-        // Assure la vue Master pour choisir l’emplacement tranquillement (optionnel)
-        var rig = cameraRig;
-        if (rig != null) rig.SetMode(CameraRig.Mode.Master);
+
+        if (cameraRig) cameraRig.SetMode(CameraRig.Mode.Master);
     }
 }

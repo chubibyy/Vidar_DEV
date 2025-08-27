@@ -1,5 +1,8 @@
 using UnityEngine;
 using Unity.Netcode;
+#if ENABLE_INPUT_SYSTEM
+using UnityEngine.InputSystem;
+#endif
 
 [RequireComponent(typeof(CharacterController))]
 public class HeroController : NetworkBehaviour
@@ -12,21 +15,30 @@ public class HeroController : NetworkBehaviour
 
     void Update()
     {
-        // Autoriser le contrôle seulement :
-        // - si on "possède" cet objet (Ownership côté client)
-        // - et si c'est notre tour
         if (!IsOwner) return;
 
         var tm = FindAnyObjectByType<TurnManager>(FindObjectsInactive.Include);
         if (tm == null || !tm.IsMyTurn()) return;
 
-        // Input basique (WSAD / flèches) - New Input System mappez sur axes "Horizontal/Vertical" si nécessaire
-        float h = Input.GetAxis("Horizontal");
-        float v = Input.GetAxis("Vertical");
+        float h = 0f, v = 0f;
+
+#if ENABLE_INPUT_SYSTEM
+        var kb = Keyboard.current;
+        if (kb != null)
+        {
+            h += kb.aKey.isPressed ? -1f : 0f;
+            h += kb.dKey.isPressed ?  1f : 0f;
+            v += kb.sKey.isPressed ? -1f : 0f;
+            v += kb.wKey.isPressed ?  1f : 0f;
+        }
+#else
+        h = Input.GetAxis("Horizontal");
+        v = Input.GetAxis("Vertical");
+#endif
+
         Vector3 dir = new Vector3(h, 0, v);
         if (dir.sqrMagnitude > 0.001f)
         {
-            // orientation + déplacement local (client-side pour MVP; serveur reste source d’état macro)
             transform.rotation = Quaternion.RotateTowards(transform.rotation, Quaternion.LookRotation(dir), turnSpeed * Time.deltaTime);
             _cc.Move(dir.normalized * moveSpeed * Time.deltaTime);
         }

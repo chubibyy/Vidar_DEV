@@ -2,58 +2,37 @@ using System.Text;
 using UnityEngine;
 using Unity.Netcode;
 
-/// <summary>
-/// Tour par tour autorité serveur (serveur dédié + 2 clients).
-/// - Le serveur maintient l'état et l'ordre des joueurs dans _players[0..1].
-/// - Les clients envoient leurs actions via ServerRpc.
-/// - Le serveur valide puis diffuse l'état via ClientRpc.
-/// </summary>
 public class TurnManager : NetworkBehaviour
 {
-    // Ajoute une table de cartes (simple) — dans un vrai projet, passe par un registry/DB
+    // ---------- Cartes & Zones ----------
     [Header("Cards Registry")]
-    [SerializeField] private CardDefinition[] allCards;    // renseigne dans l’inspector
-    [SerializeField] private Transform spawnZoneP1;        // refs dans la scène MVP
-    [SerializeField] private Transform spawnZoneP2;
+    [SerializeField] private CardDefinition[] allCards; // à remplir dans l’inspector
+    [SerializeField] private Transform spawnZoneP1;     // BoxCollider requis
+    [SerializeField] private Transform spawnZoneP2;     // BoxCollider requis
 
-    // Pour retrouver la CardDefinition depuis un cardId
     private CardDefinition GetCard(int id)
     {
-        foreach (var c in allCards) if (c != null && c.cardId == id) return c;
+        if (allCards == null) return null;
+        foreach (var c in allCards) if (c && c.cardId == id) return c;
         return null;
     }
-    // ---------- Etat de jeu ----------
-    [System.Serializable]
-    public class BoardState
-    {
-        public int turnIndex;        // 0,1,2...
-        public int activePlayer;     // 0 = Joueur 1, 1 = Joueur 2
-        public int movesP1;
-        public int movesP2;
 
-        public static BoardState CreateInitial()
-        {
-            return new BoardState { turnIndex = 0, activePlayer = 0, movesP1 = 0, movesP2 = 0 };
-        }
-    }
-
+    // ---------- Etat ----------
     public BoardState State { get; private set; }
 
-    // ---------- Joueurs (répliqué par NGO) ----------
-    // IMPORTANT: NetworkList doit être instanciée à la déclaration (sinon erreur NGO).
+    // ---------- Joueurs (réplication NGO) ----------
+    // doit être instanciée à la déclaration
     private readonly NetworkList<ulong> _players = new NetworkList<ulong>();
 
-    // ---------- Hooks UI locaux (non réseau) ----------
+    // ---------- Hooks locaux ----------
     public System.Action<BoardState> OnStateChanged;
     public System.Action OnSpawned;
-
     public bool IsReady { get; private set; }
 
     private static readonly Encoding Utf8 = Encoding.UTF8;
 
     private void Awake()
     {
-        // Valeur locale pour éviter le null côté client avant le premier sync
         State = BoardState.CreateInitial();
         IsReady = false;
     }
@@ -62,16 +41,18 @@ public class TurnManager : NetworkBehaviour
     {
         if (IsServer)
         {
+            // callbacks (après seed ci-dessous)
             NetworkManager.OnClientConnectedCallback += OnClientConnected;
             NetworkManager.OnClientDisconnectCallback += OnClientDisconnected;
 
-            // Nettoie la liste en cas de reload serveur
+            // seed la liste avec les clients déjà connectés (très important)
             _players.Clear();
+            SeedPlayersFromConnections();
 
-            // Source de vérité initiale
+            // pousse l’état initial
             State = BoardState.CreateInitial();
-            NotifyClientsClientRpc(Serialize(State)); // pousse vers les clients
-            NotifyLocal();                            // et met à jour local (monitoring serveur éventuel)
+            NotifyClientsClientRpc(Serialize(State));
+            NotifyLocal();
         }
 
         IsReady = true;
@@ -89,23 +70,40 @@ public class TurnManager : NetworkBehaviour
         IsReady = false;
     }
 
-    // ---------- Connexions (serveur) ----------
-    private void OnClientConnected(ulong clientId)
+    private void SeedPlayersFromConnections()
     {
-        // Enregistre jusqu'à 2 joueurs (serveur n'est pas joueur)
+        foreach (var id in NetworkManager.ConnectedClientsIds)
+        {
+            if (id == NetworkManager.ServerClientId) continue; // ignore serveur
+            AddPlayerIfAbsent(id);
+        }
+        Debug.Log($"[TurnManager] Seed players: count={_players.Count}");
+    }
+
+    private void AddPlayerIfAbsent(ulong clientId)
+    {
+        for (int i = 0; i < _players.Count; i++)
+            if (_players[i] == clientId) return;
+
         if (_players.Count < 2)
         {
             _players.Add(clientId);
-            Debug.Log($"[Server] Client {clientId} -> playerIndex={_players.Count - 1}");
-
-            // Option: renvoyer l'état actuel (utile si un client arrive en cours)
-            NotifyClientsClientRpc(Serialize(State));
+            Debug.Log($"[TurnManager] Add player clientId={clientId} -> index={_players.Count - 1}");
         }
         else
         {
-            Debug.Log("[Server] Partie pleine, on refuse un 3e client.");
-            NetworkManager.DisconnectClient(clientId);
+            Debug.Log("[TurnManager] Partie pleine, client ignoré.");
         }
+    }
+
+    // ---------- Connexions (serveur) ----------
+    private void OnClientConnected(ulong clientId)
+    {
+        if (clientId == NetworkManager.ServerClientId) return;
+        AddPlayerIfAbsent(clientId);
+
+        // (re)pousser l’état
+        NotifyClientsClientRpc(Serialize(State));
     }
 
     private void OnClientDisconnected(ulong clientId)
@@ -118,24 +116,21 @@ public class TurnManager : NetworkBehaviour
                 break;
             }
         }
-        // TODO: gérer abandon, victoire auto, etc.
+        // TODO: abandon / fin auto / pause
     }
 
-    // ---------- API appelée par l'UI locale ----------
+    // ---------- API locale (UI) ----------
+    // IMPORTANT : côté serveur, ces méthodes ne font rien (pas d’input serveur)
     public void MakeMove()
     {
-        if (!IsReady) return;
-
-        if (IsServer) ApplyMove();           // (utile si tu ajoutes plus tard un client local d'observation)
-        else          MakeMoveServerRpc();
+        if (!IsReady || !IsClient) return;
+        MakeMoveServerRpc();
     }
 
     public void EndTurn()
     {
-        if (!IsReady) return;
-
-        if (IsServer) ApplyEndTurn();
-        else          EndTurnServerRpc();
+        if (!IsReady || !IsClient) return;
+        EndTurnServerRpc();
     }
 
     // ---------- RPC côté serveur ----------
@@ -157,90 +152,105 @@ public class TurnManager : NetworkBehaviour
     {
         var senderId = rpc.Receive.SenderClientId;
         int senderIndex = GetPlayerIndexFromClientId(senderId);
-
-        // refuse si:
-        // - sender non mappé (-1)
-        // - pas son tour
-        // - (option) si les 2 joueurs ne sont pas encore connectés, autoriser seulement player 0
-        if (senderIndex == -1) return false;
-
-        // Empêche de jouer si l'adversaire n'est pas encore connecté (optionnel)
-        // if (_players.Count < 2 && senderIndex != 0) return false;
-
-        return senderIndex == State.activePlayer;
+        return senderIndex != -1 && senderIndex == State.activePlayer;
     }
-    
+
+    // ---------- Placement de héros ----------
     [ServerRpc(RequireOwnership = false)]
     public void PlaceHeroServerRpc(int cardId, Vector3 requestedPos, ServerRpcParams rpc = default)
     {
         var sender = rpc.Receive.SenderClientId;
         int pIndex = GetPlayerIndexFromClientId(sender);
-        if (pIndex == -1 || pIndex != State.activePlayer) return; // seulement le joueur actif
 
-        // Valide la position (doit être dans la zone de spawn du joueur pIndex)
-        if (!IsInsideSpawnZone(requestedPos, pIndex)) return;
+        if (pIndex == -1)
+        {
+            PlaceHeroResultClientRpc(false, "joueur non enregistré",
+                new ClientRpcParams { Send = new ClientRpcSendParams { TargetClientIds = new[] { sender } } });
+            return;
+        }
+        if (pIndex != State.activePlayer)
+        {
+            PlaceHeroResultClientRpc(false, "pas ton tour",
+                new ClientRpcParams { Send = new ClientRpcSendParams { TargetClientIds = new[] { sender } } });
+            return;
+        }
+        if (!IsInsideSpawnZone(requestedPos, pIndex))
+        {
+            PlaceHeroResultClientRpc(false, "hors zone de spawn",
+                new ClientRpcParams { Send = new ClientRpcSendParams { TargetClientIds = new[] { sender } } });
+            return;
+        }
 
         var card = GetCard(cardId);
-        if (card == null || card.heroPrefab == null) return;
+        if (!card || !card.heroPrefab)
+        {
+            PlaceHeroResultClientRpc(false, "carte/prefab invalide",
+                new ClientRpcParams { Send = new ClientRpcSendParams { TargetClientIds = new[] { sender } } });
+            return;
+        }
 
-        // Instancie le héros, spawn réseau, ownership -> joueur
-        var go = Instantiate(card.heroPrefab, requestedPos, Quaternion.identity);
+        var spawnPos = requestedPos; spawnPos.y += 0.05f;
+
+        var go = Instantiate(card.heroPrefab, spawnPos, Quaternion.identity);
         var no = go.GetComponent<NetworkObject>();
-        if (no == null) { Destroy(go); return; }
+        if (!no)
+        {
+            Destroy(go);
+            PlaceHeroResultClientRpc(false, "NetworkObject manquant",
+                new ClientRpcParams { Send = new ClientRpcSendParams { TargetClientIds = new[] { sender } } });
+            return;
+        }
 
-        no.Spawn();                 // serveur crée l'objet réseau
-        no.ChangeOwnership(sender); // donne la possession au client
+        no.Spawn();
+        no.ChangeOwnership(sender);
 
-        // Demande au client concerné de passer sa cam en TPS et suivre ce héros
-        FocusHeroClientRpc(no.NetworkObjectId, new ClientRpcParams {
-            Send = new ClientRpcSendParams { TargetClientIds = new[] { sender } }
-        });
+        // Focus TPS chez le client propriétaire
+        FocusHeroClientRpc(no.NetworkObjectId,
+            new ClientRpcParams { Send = new ClientRpcSendParams { TargetClientIds = new[] { sender } } });
 
-        // (Option) marquer la carte comme consommée, mettre à jour l'état, etc.
+        PlaceHeroResultClientRpc(true, "ok",
+            new ClientRpcParams { Send = new ClientRpcSendParams { TargetClientIds = new[] { sender } } });
+
         BroadcastState();
     }
 
-    private bool IsInsideSpawnZone(Vector3 pos, int playerIndex)
+    private bool IsInsideSpawnZone(Vector3 worldPos, int playerIndex)
     {
         var tz = (playerIndex == 0) ? spawnZoneP1 : spawnZoneP2;
-        if (tz == null) return false;
+        if (!tz) return false;
 
-        // On prend le BoxCollider de la zone
         var bc = tz.GetComponent<BoxCollider>();
-        if (bc == null) return false;
+        if (!bc) return false;
 
-        // test point-in-box en coordonnées locales
-        var lp = tz.InverseTransformPoint(pos);
-        return Mathf.Abs(lp.x) <= bc.size.x * 0.5f &&
-            Mathf.Abs(lp.y) <= bc.size.y * 0.5f &&
-            Mathf.Abs(lp.z) <= bc.size.z * 0.5f;
+        var b = bc.bounds; b.Expand(0.01f);
+        return b.Contains(worldPos);
+    }
+
+    [ClientRpc]
+    private void PlaceHeroResultClientRpc(bool ok, string reason, ClientRpcParams target = default)
+    {
+        if (!ok) Debug.LogWarning($"[Placement] refusé: {reason}");
     }
 
     [ClientRpc]
     private void FocusHeroClientRpc(ulong heroNetId, ClientRpcParams target = default)
     {
-        // côté client: passer la caméra en TPS, suivre le héros
         var nm = NetworkManager.Singleton;
         if (nm == null || !nm.SpawnManager.SpawnedObjects.TryGetValue(heroNetId, out var netObj)) return;
-
-        var hero = netObj.transform;
 
         var camRig = FindAnyObjectByType<CameraRig>(FindObjectsInactive.Include);
         if (camRig != null)
         {
-            camRig.Follow(hero);
+            camRig.Follow(netObj.transform);
             camRig.SetMode(CameraRig.Mode.TPS);
         }
     }
-
-
 
     // ---------- Logique serveur ----------
     private void ApplyMove()
     {
         if (State.activePlayer == 0) State.movesP1++;
-        else State.movesP2++;
-
+        else                         State.movesP2++;
         BroadcastState();
     }
 
@@ -248,13 +258,11 @@ public class TurnManager : NetworkBehaviour
     {
         State.turnIndex++;
         State.activePlayer = (State.activePlayer == 0) ? 1 : 0;
-
         BroadcastState();
     }
 
     private void BroadcastState()
     {
-        // Diffuse l'état aux clients; le serveur met aussi à jour sa vue locale
         var packed = Serialize(State);
         NotifyClientsClientRpc(packed);
         NotifyLocal();
@@ -263,19 +271,19 @@ public class TurnManager : NetworkBehaviour
     // ---------- Helpers joueurs ----------
     public bool IsMyTurn()
     {
-        if (!IsReady) return false;
+        if (!IsReady || !IsClient) return false; // serveur non joueur
         int myIdx = GetLocalPlayerIndex();
         return myIdx != -1 && myIdx == State.activePlayer;
     }
 
+    public int GetLocalPlayerIndexPublic() => GetLocalPlayerIndex();
+
     private int GetLocalPlayerIndex()
     {
         if (_players.Count == 0) return -1;
-
-        ulong me = NetworkManager.LocalClientId; // côté client
+        ulong me = NetworkManager.LocalClientId;
         for (int i = 0; i < _players.Count; i++)
             if (_players[i] == me) return i;
-
         return -1;
     }
 
@@ -283,11 +291,10 @@ public class TurnManager : NetworkBehaviour
     {
         for (int i = 0; i < _players.Count; i++)
             if (_players[i] == clientId) return i;
-
         return -1;
     }
 
-    // ---------- Sync vers clients ----------
+    // ---------- Sync ----------
     [ClientRpc]
     private void NotifyClientsClientRpc(byte[] packed)
     {
@@ -297,7 +304,7 @@ public class TurnManager : NetworkBehaviour
 
     private void NotifyLocal() => OnStateChanged?.Invoke(State);
 
-    // ---------- Sérialisation (simple, Unity) ----------
+    // ---------- Sérialisation ----------
     private static byte[] Serialize(BoardState s)
     {
         string json = JsonUtility.ToJson(s);
