@@ -2,11 +2,18 @@ using System.Text;
 using UnityEngine;
 using Unity.Netcode;
 
+/// <summary>
+/// Serveur dédié + 2 clients. Le serveur est l'autorité.
+/// - Les clients envoient leurs actions via ServerRpc.
+/// - Le serveur valide et diffuse l'état via ClientRpc.
+/// - Gestion des joueurs via NetworkList (seed au spawn du TM).
+/// - Deux modes de spawn: Summon (zone) et Place (clic map).
+/// </summary>
 public class TurnManager : NetworkBehaviour
 {
     // ---------- Cartes & Zones ----------
     [Header("Cards Registry")]
-    [SerializeField] private CardDefinition[] allCards; // à remplir dans l’inspector
+    [SerializeField] private CardDefinition[] allCards; // Renseigner dans l’inspector (tous les SO de cartes)
     [SerializeField] private Transform spawnZoneP1;     // BoxCollider requis
     [SerializeField] private Transform spawnZoneP2;     // BoxCollider requis
 
@@ -21,10 +28,10 @@ public class TurnManager : NetworkBehaviour
     public BoardState State { get; private set; }
 
     // ---------- Joueurs (réplication NGO) ----------
-    // doit être instanciée à la déclaration
+    // IMPORTANT : instancier à la déclaration
     private readonly NetworkList<ulong> _players = new NetworkList<ulong>();
 
-    // ---------- Hooks locaux ----------
+    // ---------- Hooks locaux (non réseau) ----------
     public System.Action<BoardState> OnStateChanged;
     public System.Action OnSpawned;
     public bool IsReady { get; private set; }
@@ -41,11 +48,10 @@ public class TurnManager : NetworkBehaviour
     {
         if (IsServer)
         {
-            // callbacks (après seed ci-dessous)
             NetworkManager.OnClientConnectedCallback += OnClientConnected;
             NetworkManager.OnClientDisconnectCallback += OnClientDisconnected;
 
-            // seed la liste avec les clients déjà connectés (très important)
+            // seed avec les clients déjà connectés (si le TM arrive après eux)
             _players.Clear();
             SeedPlayersFromConnections();
 
@@ -101,7 +107,6 @@ public class TurnManager : NetworkBehaviour
     {
         if (clientId == NetworkManager.ServerClientId) return;
         AddPlayerIfAbsent(clientId);
-
         // (re)pousser l’état
         NotifyClientsClientRpc(Serialize(State));
     }
@@ -155,7 +160,45 @@ public class TurnManager : NetworkBehaviour
         return senderIndex != -1 && senderIndex == State.activePlayer;
     }
 
-    // ---------- Placement de héros ----------
+    // ---------- Summon (spawn sans clic map) ----------
+    [ServerRpc(RequireOwnership = false)]
+    public void SummonHeroServerRpc(int cardId, ServerRpcParams rpc = default)
+    {
+        var sender = rpc.Receive.SenderClientId;
+        int pIndex = GetPlayerIndexFromClientId(sender);
+
+        if (pIndex == -1)
+        {
+            PlaceHeroResultClientRpc(false, "joueur non enregistré",
+                Target(sender));
+            return;
+        }
+        if (pIndex != State.activePlayer)
+        {
+            PlaceHeroResultClientRpc(false, "pas ton tour",
+                Target(sender));
+            return;
+        }
+
+        var card = GetCard(cardId);
+        if (!card || !card.heroPrefab)
+        {
+            PlaceHeroResultClientRpc(false, "carte/prefab invalide",
+                Target(sender));
+            return;
+        }
+
+        if (!TryGetSpawnPointInZone(pIndex, out var spawnPos))
+        {
+            PlaceHeroResultClientRpc(false, "zone de spawn introuvable",
+                Target(sender));
+            return;
+        }
+
+        SpawnHeroForClient(card.heroPrefab, spawnPos, sender);
+    }
+
+    // ---------- Placement (spawn au point cliqué) ----------
     [ServerRpc(RequireOwnership = false)]
     public void PlaceHeroServerRpc(int cardId, Vector3 requestedPos, ServerRpcParams rpc = default)
     {
@@ -164,56 +207,62 @@ public class TurnManager : NetworkBehaviour
 
         if (pIndex == -1)
         {
-            PlaceHeroResultClientRpc(false, "joueur non enregistré",
-                new ClientRpcParams { Send = new ClientRpcSendParams { TargetClientIds = new[] { sender } } });
+            PlaceHeroResultClientRpc(false, "joueur non enregistré", Target(sender));
             return;
         }
         if (pIndex != State.activePlayer)
         {
-            PlaceHeroResultClientRpc(false, "pas ton tour",
-                new ClientRpcParams { Send = new ClientRpcSendParams { TargetClientIds = new[] { sender } } });
+            PlaceHeroResultClientRpc(false, "pas ton tour", Target(sender));
             return;
         }
         if (!IsInsideSpawnZone(requestedPos, pIndex))
         {
-            PlaceHeroResultClientRpc(false, "hors zone de spawn",
-                new ClientRpcParams { Send = new ClientRpcSendParams { TargetClientIds = new[] { sender } } });
+            PlaceHeroResultClientRpc(false, "hors zone de spawn", Target(sender));
             return;
         }
 
         var card = GetCard(cardId);
         if (!card || !card.heroPrefab)
         {
-            PlaceHeroResultClientRpc(false, "carte/prefab invalide",
-                new ClientRpcParams { Send = new ClientRpcSendParams { TargetClientIds = new[] { sender } } });
+            PlaceHeroResultClientRpc(false, "carte/prefab invalide", Target(sender));
             return;
         }
 
+        // légère correction de hauteur
         var spawnPos = requestedPos; spawnPos.y += 0.05f;
 
-        var go = Instantiate(card.heroPrefab, spawnPos, Quaternion.identity);
+        SpawnHeroForClient(card.heroPrefab, spawnPos, sender);
+    }
+
+    // ---------- Impl commune de spawn ----------
+    private void SpawnHeroForClient(GameObject heroPrefab, Vector3 spawnPos, ulong ownerClientId)
+    {
+        var go = Instantiate(heroPrefab, spawnPos, Quaternion.identity);
         var no = go.GetComponent<NetworkObject>();
         if (!no)
         {
             Destroy(go);
-            PlaceHeroResultClientRpc(false, "NetworkObject manquant",
-                new ClientRpcParams { Send = new ClientRpcSendParams { TargetClientIds = new[] { sender } } });
+            PlaceHeroResultClientRpc(false, "NetworkObject manquant", Target(ownerClientId));
             return;
         }
 
         no.Spawn();
-        no.ChangeOwnership(sender);
+        no.ChangeOwnership(ownerClientId);
 
         // Focus TPS chez le client propriétaire
-        FocusHeroClientRpc(no.NetworkObjectId,
-            new ClientRpcParams { Send = new ClientRpcSendParams { TargetClientIds = new[] { sender } } });
+        FocusHeroClientRpc(no.NetworkObjectId, Target(ownerClientId));
 
-        PlaceHeroResultClientRpc(true, "ok",
-            new ClientRpcParams { Send = new ClientRpcSendParams { TargetClientIds = new[] { sender } } });
+        PlaceHeroResultClientRpc(true, "ok", Target(ownerClientId));
 
         BroadcastState();
     }
 
+    private ClientRpcParams Target(ulong clientId)
+    {
+        return new ClientRpcParams { Send = new ClientRpcSendParams { TargetClientIds = new[] { clientId } } };
+    }
+
+    // ---------- Aides zones de spawn ----------
     private bool IsInsideSpawnZone(Vector3 worldPos, int playerIndex)
     {
         var tz = (playerIndex == 0) ? spawnZoneP1 : spawnZoneP2;
@@ -222,10 +271,49 @@ public class TurnManager : NetworkBehaviour
         var bc = tz.GetComponent<BoxCollider>();
         if (!bc) return false;
 
-        var b = bc.bounds; b.Expand(0.01f);
+        var b = bc.bounds; b.Expand(0.01f); // petite tolérance
         return b.Contains(worldPos);
     }
 
+    private bool TryGetSpawnPointInZone(int playerIndex, out Vector3 pos)
+    {
+        pos = Vector3.zero;
+        var tz = (playerIndex == 0) ? spawnZoneP1 : spawnZoneP2;
+        if (!tz) return false;
+
+        var bc = tz.GetComponent<BoxCollider>();
+        if (!bc) return false;
+
+        // A) centre des bounds + raycast vers le bas (colle au sol si terrain irrégulier)
+        var center = bc.bounds.center + Vector3.up * 3f;
+        if (Physics.Raycast(center, Vector3.down, out var hit, 20f))
+        {
+            pos = hit.point + Vector3.up * 0.05f;
+            return true;
+        }
+
+        // B) quelques essais random dans la box, puis raycast
+        for (int i = 0; i < 8; i++)
+        {
+            var b = bc.bounds;
+            var rnd = new Vector3(
+                Random.Range(b.min.x, b.max.x),
+                b.max.y + 3f,
+                Random.Range(b.min.z, b.max.z)
+            );
+            if (Physics.Raycast(rnd, Vector3.down, out hit, 30f))
+            {
+                pos = hit.point + Vector3.up * 0.05f;
+                return true;
+            }
+        }
+
+        // Fallback : centre brut
+        pos = bc.bounds.center + Vector3.up * 0.05f;
+        return true;
+    }
+
+    // ---------- Feedback client ----------
     [ClientRpc]
     private void PlaceHeroResultClientRpc(bool ok, string reason, ClientRpcParams target = default)
     {
@@ -271,7 +359,7 @@ public class TurnManager : NetworkBehaviour
     // ---------- Helpers joueurs ----------
     public bool IsMyTurn()
     {
-        if (!IsReady || !IsClient) return false; // serveur non joueur
+        if (!IsReady || !IsClient) return false; // serveur n'est pas un joueur
         int myIdx = GetLocalPlayerIndex();
         return myIdx != -1 && myIdx == State.activePlayer;
     }
