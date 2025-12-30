@@ -139,21 +139,21 @@ public class TurnManager : NetworkBehaviour
     }
 
     // ---------- RPC côté serveur ----------
-    [ServerRpc(RequireOwnership = false)]
-    private void MakeMoveServerRpc(ServerRpcParams rpc = default)
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
+    private void MakeMoveServerRpc(RpcParams rpc = default)
     {
         if (!IsLegalSender(rpc)) return;
         ApplyMove();
     }
 
-    [ServerRpc(RequireOwnership = false)]
-    private void EndTurnServerRpc(ServerRpcParams rpc = default)
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
+    private void EndTurnServerRpc(RpcParams rpc = default)
     {
         if (!IsLegalSender(rpc)) return;
         ApplyEndTurn();
     }
 
-    private bool IsLegalSender(ServerRpcParams rpc)
+    private bool IsLegalSender(RpcParams rpc)
     {
         var senderId = rpc.Receive.SenderClientId;
         int senderIndex = GetPlayerIndexFromClientId(senderId);
@@ -161,8 +161,8 @@ public class TurnManager : NetworkBehaviour
     }
 
     // ---------- Summon (spawn sans clic map) ----------
-    [ServerRpc(RequireOwnership = false)]
-    public void SummonHeroServerRpc(int cardId, ServerRpcParams rpc = default)
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
+    public void SummonHeroServerRpc(int cardId, RpcParams rpc = default)
     {
         var sender = rpc.Receive.SenderClientId;
         int pIndex = GetPlayerIndexFromClientId(sender);
@@ -199,8 +199,8 @@ public class TurnManager : NetworkBehaviour
     }
 
     // ---------- Placement (spawn au point cliqué) ----------
-    [ServerRpc(RequireOwnership = false)]
-    public void PlaceHeroServerRpc(int cardId, Vector3 requestedPos, ServerRpcParams rpc = default)
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
+    public void PlaceHeroServerRpc(int cardId, Vector3 requestedPos, RpcParams rpc = default)
     {
         var sender = rpc.Receive.SenderClientId;
         int pIndex = GetPlayerIndexFromClientId(sender);
