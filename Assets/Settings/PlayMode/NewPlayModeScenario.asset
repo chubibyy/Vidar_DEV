@@ -9,9 +9,9 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: a689d91966dfb46499fb63f130d9b905, type: 3}
+  m_Script: {fileID: 15024, guid: 0000000000000000e000000000000000, type: 0}
   m_Name: NewPlayModeScenario
-  m_EditorClassIdentifier: Unity.Multiplayer.PlayMode.Scenarios.Editor::Unity.Multiplayer.PlayMode.Scenarios.Editor.ScenarioConfig
+  m_EditorClassIdentifier: UnityEditor.MultiplayerModule.dll::Unity.Multiplayer.PlayMode.Editor.ScenarioConfig
   m_Description: 
   m_EnableEditors: 1
   m_MainEditorInstance:
@@ -22,7 +22,7 @@ MonoBehaviour:
     - Main Editor|0_deploy
     m_Role: 2
     m_PlayerTag: 
-    m_InitialScene: {fileID: 102900000, guid: 251ad4f33560b344c8a63dd9d8cf83dd, type: 3}
+    m_InitialScene: {fileID: 0}
   m_EditorInstances:
   - Name: Player 2
     <CorrespondingNodeId>k__BackingField: Player 2|1_run
@@ -48,8 +48,6 @@ MonoBehaviour:
       LogsColor: {r: 0.3643, g: 0.581, b: 0.8679, a: 1}
   m_LocalInstances: []
   m_RemoteInstances: []
-  m_OverridePort: 0
-  m_Port: 0
   m_MainEditorInstanceObsolete:
     rid: -2
   references:
