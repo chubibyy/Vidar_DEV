@@ -1,10 +1,20 @@
 using UnityEngine;
 
-[CreateAssetMenu(fileName = "CardDefinition", menuName = "Vidar/Card Definition")]
+[CreateAssetMenu(fileName = "NewUnitCard", menuName = "Vidar/Unit Card Definition")]
 public class CardDefinition : ScriptableObject
 {
-    public int cardId;                 // identifiant stable
+    [Header("Identity")]
+    public int cardId;                 // Unique ID for networking/serialization
     public string displayName;
-    public GameObject heroPrefab;      // le prefab réseau "Hero" (avec NetworkObject)
-    // Plus tard: stats, classe, skin, capacités, coût, etc.
+    [TextArea] public string description;
+    public TeamType team;
+
+    [Header("Visuals")]
+    public Sprite icon;
+    public GameObject unitPrefab;      // The actual spawned network object
+
+    [Header("Stats")]
+    public int manaCost;
+    public int maxHealth;
+    public int attackPower;
 }

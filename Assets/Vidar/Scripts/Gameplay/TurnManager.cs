@@ -180,7 +180,7 @@ public class TurnManager : NetworkBehaviour
         }
 
         var card = GetCard(cardId);
-        if (!card || !card.heroPrefab)
+        if (!card || !card.unitPrefab)
         {
             PlaceHeroResultClientRpc(false, "carte/prefab invalide",
                 Target(sender));
@@ -194,7 +194,7 @@ public class TurnManager : NetworkBehaviour
             return;
         }
 
-        SpawnHeroForClient(card.heroPrefab, spawnPos, sender);
+        SpawnHeroForClient(card, spawnPos, sender);
     }
 
     // ---------- Placement (spawn au point cliqué) ----------
@@ -221,7 +221,7 @@ public class TurnManager : NetworkBehaviour
         }
 
         var card = GetCard(cardId);
-        if (!card || !card.heroPrefab)
+        if (!card || !card.unitPrefab)
         {
             PlaceHeroResultClientRpc(false, "carte/prefab invalide", Target(sender));
             return;
@@ -230,13 +230,13 @@ public class TurnManager : NetworkBehaviour
         // légère correction de hauteur
         var spawnPos = requestedPos; spawnPos.y += 0.05f;
 
-        SpawnHeroForClient(card.heroPrefab, spawnPos, sender);
+        SpawnHeroForClient(card, spawnPos, sender);
     }
 
     // ---------- Impl commune de spawn ----------
-    private void SpawnHeroForClient(GameObject heroPrefab, Vector3 spawnPos, ulong ownerClientId)
+    private void SpawnHeroForClient(CardDefinition card, Vector3 spawnPos, ulong ownerClientId)
     {
-        var go = Instantiate(heroPrefab, spawnPos, Quaternion.identity);
+        var go = Instantiate(card.unitPrefab, spawnPos, Quaternion.identity);
         var no = go.GetComponent<NetworkObject>();
         if (!no)
         {
@@ -247,6 +247,13 @@ public class TurnManager : NetworkBehaviour
 
         no.Spawn();
         no.ChangeOwnership(ownerClientId);
+
+        // Init UnitState
+        var state = go.GetComponent<UnitState>();
+        if (state != null)
+        {
+            state.Initialize(card);
+        }
 
         // Focus TPS chez le client propriétaire
         FocusHeroClientRpc(no.NetworkObjectId, Target(ownerClientId));

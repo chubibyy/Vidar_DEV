@@ -7,15 +7,23 @@ using Unity.Netcode.Transports.UTP;
 [RequireComponent(typeof(UnityTransport))]
 public class UnifiedBootstrap : MonoBehaviour
 {
-    [SerializeField] private string gameSceneName = "MVP";
-    [SerializeField] private NetSettings fallbackSettings; // assigne ton NetSettings.asset ici
+    [SerializeField] private string gameSceneName = "Match"; // Updated from MVP
+    [SerializeField] private NetSettings fallbackSettings;
+    [SerializeField] private bool autoConnectOnStart = false; // New flag
 
     void Start()
+    {
+        if (autoConnectOnStart)
+        {
+            InitiateConnection();
+        }
+    }
+
+    public void InitiateConnection()
     {
         var nm  = GetComponent<NetworkManager>();
         var utp = GetComponent<UnityTransport>();
 
-        // Sécurité: si ApplyNetSettings n’a pas tourné, on pousse la config ici
         EnsureTransportConfigured(utp);
 
         // 1) Essayer serveur
@@ -47,10 +55,8 @@ public class UnifiedBootstrap : MonoBehaviour
 
     private IEnumerator StartClientNextFrame(NetworkManager nm, UnityTransport utp)
     {
-        // Le StartServer() raté déclenche un shutdown interne asynchrone : on attend 1 frame
         yield return null;
 
-        // On re-pousse *explicitement* l’adresse/port côté client (sans listenAddress)
         if (fallbackSettings != null)
         {
             int p = Mathf.Clamp(fallbackSettings.port, 1, 65535);
@@ -58,10 +64,8 @@ public class UnifiedBootstrap : MonoBehaviour
             Debug.Log($"[UnifiedBootstrap] Client config → connect {fallbackSettings.serverAddress}:{p}");
         }
 
-        // Safety: si Netcode était encore actif, on le stoppe avant de relancer le client
         if (nm.IsListening) nm.Shutdown();
 
-        // Maintenant on démarre le client
         if (!nm.StartClient())
         {
             Debug.LogError("[UnifiedBootstrap] StartClient a échoué (serveur indisponible ?).");
@@ -76,7 +80,6 @@ public class UnifiedBootstrap : MonoBehaviour
         {
             int p = Mathf.Clamp(fallbackSettings.port, 1, 65535);
             utp.SetConnectionData(fallbackSettings.serverAddress, (ushort)p, fallbackSettings.serverListenAddress);
-            Debug.LogWarning($"[UnifiedBootstrap] Transport non configuré → fallback {fallbackSettings.serverAddress}:{p} | listen {fallbackSettings.serverListenAddress}:{p}");
         }
     }
 }

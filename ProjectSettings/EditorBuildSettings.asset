@@ -9,6 +9,12 @@ EditorBuildSettings:
     path: Assets/Vidar/Scenes/Boot/Boot.unity
     guid: 251ad4f33560b344c8a63dd9d8cf83dd
   - enabled: 1
+    path: Assets/Vidar/Scenes/Menu/Menu-Sign.unity
+    guid: 693f13d4d421547ff9b0625671cb1af8
+  - enabled: 1
+    path: Assets/Vidar/Scenes/Menu/Menu-Global.unity
+    guid: a0bebfb8fb96b4572abfe37331704df7
+  - enabled: 1
     path: Assets/Vidar/Scenes/Sandbox/MVP.unity
     guid: 725ef4e7a4fb01e458248de258891410
   m_configObjects:
