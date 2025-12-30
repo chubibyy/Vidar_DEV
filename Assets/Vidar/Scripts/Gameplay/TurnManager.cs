@@ -71,7 +71,6 @@ public class TurnManager : NetworkBehaviour
         {
             NetworkManager.OnClientConnectedCallback -= OnClientConnected;
             NetworkManager.OnClientDisconnectCallback -= OnClientDisconnected;
-            _players.Clear();
         }
         IsReady = false;
     }
