@@ -579,7 +579,7 @@ MonoBehaviour:
   apiUrl: https://api.edgegap.com/v1
   apiKey: token c5936124-cfcb-4f28-89ff-3ccc8afee570
   appName: vidar_dev
-  appVersion: '25.12.31-16.26.43-UTC '
+  appVersion: 25.12.31-16.39.27-UTC
 --- !u!114 &1971487339
 MonoBehaviour:
   m_ObjectHideFlags: 0

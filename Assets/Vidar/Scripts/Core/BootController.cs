@@ -11,6 +11,10 @@ public class BootController : MonoBehaviour
     {
         Debug.Log("[Boot] Starting initialization...");
 
+        // Debug Args
+        string[] args = System.Environment.GetCommandLineArgs();
+        Debug.Log($"[Boot] Args: {string.Join(" ", args)}");
+
         // 1. Initialize Authentication
         if (AuthenticationManager.Instance != null)
         {
@@ -33,7 +37,7 @@ public class BootController : MonoBehaviour
 #endif
 
         // 3. Fallback: Check for manual "-mode server" arg (for local testing without Server Build)
-        string[] args = System.Environment.GetCommandLineArgs();
+        // Args already fetched above
         if (args.Contains("-mode") && args.Contains("server"))
         {
             Debug.Log("[Boot] Argument '-mode server' detected.");

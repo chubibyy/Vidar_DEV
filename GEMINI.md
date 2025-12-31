@@ -1,117 +1,170 @@
 # Vidar - Project Master Documentation
 
-**Vidar** is a multiplayer turn-based strategy game built with **Unity 6 (6000.3.2f1)**. 
-It uses a **Client-Hosted Relay Architecture** (via Unity Relay) orchestrated by **Sessions** (Unity Multiplayer Services SDK 2.0).
+**Vidar** is a multiplayer turn-based strategy game built with **Unity 6 (6000.3.2f1)**.  
+It leverages **Edgegap** for on-demand containerized hosting and **Unity Netcode for GameObjects (NGO)** for authoritative networking.
 
 ---
 
-## 1. Project Architecture
+## 1. High-Level Architecture
 
-### **A. Core Services (Backend Layer)**
-*Path: `Assets/Vidar/Scripts/Core/Services/`*
-*   **MatchmakingManager (`MatchmakingManager.cs`)**:
-    *   **The Brain:** Handles Server Discovery and Joining.
-    *   **Logic:** Uses `EdgegapService` to Deploy On-Demand Servers (`POST /deploy`). Connects via `UnityTransport` (Direct IP).
-    *   **Authentication:** Requires `AuthenticationManager` login first.
-*   **EdgegapService (`EdgegapService.cs`)**:
-    *   **Hosting Provider:** Manages API calls to Edgegap (Deploy, Status).
-    *   **Config:** Uses `EdgegapConfig` (ScriptableObject) for API Keys and App Version.
-*   **DedicatedServerManager (`DedicatedServerManager.cs`)**:
-    *   **Server Lifecycle:** Generic implementation for Containerized Hosting.
-    *   **Startup:** Reads Port from `-port` arg or `SERVER_PORT` env var. Starts `NetworkManager` immediately (no Allocation wait).
-*   **AuthenticationManager (`AuthenticationManager.cs`)**:
-    *   Wraps Unity Auth. Anonymous Login is default. Persists `PlayerId`.
-*   **PlayerDataManager (`PlayerDataManager.cs`)**:
-    *   **Cloud Save:** Syncs `PlayerProfile` (Gold, UnlockedUnits).
-    *   **Gacha:** Handles `BuyPack()` logic securely (Deduct Gold -> Roll Registry -> Save).
-*   **BootController (`BootController.cs`)**:
-    *   **Entry Point:** Initializes Services.
-    *   **Role Detection:** Checks `#if UNITY_SERVER` or `-mode server` args to start `DedicatedServerManager`.
+The project follows a **Client-Server** authoritative model.
+*   **Client:** Responsible for UI, Input, and Visuals.
+*   **Server:** Responsible for Game State, Validation, and Win Conditions.
+*   **Hosting:** Servers are stateless containers spun up on-demand via Edgegap's Distributed Cloud.
 
-### **B. Data Logic (ScriptableObjects)**
-*   **CardRegistry**: The "Master List" of every valid Unit in the game. Used for Gacha rolls.
-*   **CardDefinition**: Static data (Stats, Prefab, Team) for each Unit.
-*   **PlayerProfile**: The C# Class defining the Cloud Database Schema.
-
-### **C. Network Layer (Gameplay)**
-*   **NetworkManager**: The Unity Netcode host. Uses `UnityTransport`.
-*   **UnifiedBootstrap**: *Deprecated/Legacy*. Matchmaking logic moved to `MatchmakingManager`.
-*   **TurnManager**: Authoritative Gameplay Loop.
+### **Technology Stack**
+| Component | Technology | Description |
+| :--- | :--- | :--- |
+| **Engine** | Unity 6 (6000.3.2f1) | Core game engine. |
+| **Networking** | Netcode for GameObjects (NGO) | State synchronization & RPCs. |
+| **Transport** | Unity Transport (UTP) | UDP-based packet delivery. |
+| **Hosting** | Edgegap | Arbitrium Orchestrator for Docker containers. |
+| **Auth** | Unity Authentication | Anonymous login & Player ID persistence. |
+| **Database** | Unity Cloud Save | Player profile (Gold, Unlocked Cards). |
+| **DevOps** | Docker | Linux x86_64 containerization. |
 
 ---
 
-## 2. Directory Structure
+## 2. Directory Structure & Key Files
 
 ```text
 Assets/Vidar/
+├── Resources/
+│   └── Config/
+│       └── EdgegapConfig.asset    # Stores API Keys & App Version for Launcher
 ├── Scenes/
-│   ├── Boot.unity          # Service Init (Auto-redirects)
+│   ├── Boot.unity                 # Entry Point. Initializes Services & NetworkManager.
 │   ├── Menu/
-│   │   ├── Menu-Sign.unity # "Welcome" Screen
-│   │   └── Menu-Global.unity # Main Hub (Play, Deck, Shop)
-│   └── Match.unity         # Gameplay Map
+│   │   ├── Menu-Sign.unity        # Login Screen
+│   │   └── Menu-Global.unity      # Main Hub (Deck, Shop, Find Match)
+│   └── Match.unity                # The Game Arena (Server loads this immediately)
 ├── Scripts/
 │   ├── Core/
-│   │   ├── Services/       # Auth, Data, Matchmaking
-│   │   └── BootController.cs
-│   ├── UI/                 # LoginUI, MainMenuUI
-│   └── Gameplay/           # TurnManager, UnitState
+│   │   ├── BootController.cs      # Decides if we are Client or Server
+│   │   ├── Services/
+│   │   │   ├── DedicatedServerManager.cs # SERVER: Starts Netcode on 0.0.0.0:7777
+│   │   │   ├── MatchmakingManager.cs     # CLIENT: Requests Edgegap Server
+│   │   │   ├── PlayerDataManager.cs      # DATA: Cloud Save & Gacha Logic
+│   │   │   └── EdgegapBootstrap/         # EDGEGAP Integration
+│   │   │       ├── EdgegapLauncher.cs    # Client API to call POST /deploy
+│   │   │       └── EdgegapServerBootstrap.cs # Server Env Var Parser
+│   ├── Gameplay/
+│   │   ├── TurnManager.cs         # Core Game Loop (Turns, Phases)
+│   │   ├── UnitController.cs      # Unit Logic (Movement, Attack)
+│   │   └── CardSystem/            # Card Data & Casting
+│   └── UI/                        # UI Logic (MainMenu, In-Game HUD)
 ├── ScriptableObjects/
-│   ├── Config/             # MainCardRegistry
-│   └── Factions/           # Unit Data (Guardians/Invaders)
+│   ├── Config/                    # Game Settings
+│   └── Cards/                     # Card Definitions (Stats, Prefabs)
 ```
 
 ---
 
-## 3. Game Flow
+## 3. Server Lifecycle (The "Backend")
 
-1.  **Boot Phase:**
-    *   `BootController` inits Auth & Data.
-    *   If **Server Build**: Calls `MatchmakingManager.StartDedicatedServer()` -> Loads Match -> Waits.
-    *   If **Client**: Loads `Menu-Sign`.
-2.  **Login Phase:**
-    *   `Menu-Sign` displays ID. User clicks "Enter" -> Loads `Menu-Global`.
-3.  **Hub Phase:**
-    *   **Play:** Calls `MatchmakingManager.FindMatch()`.
-        *   Finds Session? -> Joins -> Starts Client.
-        *   No Session? -> Creates Session -> Starts Host.
-    *   **Shop:** Calls `PlayerDataManager.BuyPack()`.
-    *   **Deck:** Displays `UnlockedHeroIds` using `CardRegistry` lookups.
-4.  **Match Phase:**
-    *   Netcode handles sync. `TurnManager` runs the game.
+The Dedicated Server is a **Headless Linux Build** wrapped in a Docker container.
 
----
+### **A. Startup Sequence**
+1.  **Docker Launch:** The container starts via command:
+    `./Vidar_DEV -mode server -batchmode -nographics -port 7777`
+2.  **Scene 0: Boot.unity:**
+    *   `BootController.Start()` executes.
+    *   Detects Server Mode via `#if UNITY_SERVER` or `-mode server` argument.
+    *   Calls `DedicatedServerManager.StartServerService()`.
+3.  **Netcode Initialization:**
+    *   `DedicatedServerManager` finds `NetworkManager` (must be present in Boot!).
+    *   Binds `UnityTransport` to IP **`0.0.0.0`** (All Interfaces) on Port **`7777`**.
+    *   Calls `NetworkManager.Singleton.StartServer()`.
+4.  **Scene Load:**
+    *   Immediately loads `Match.unity`.
+    *   Server is now "Ready" and waiting for clients.
 
-## 4. Build & Deployment (DevOps)
-
-We use **Unity Build Profiles** to manage Client vs Server builds.
-
-### **How to Build**
-1.  Open **File > Build Profiles**.
-2.  **Server Build:**
-    *   Select Profile: **Vidar_Server**.
-    *   Role: **Server** (Enforces Batchmode, defines `UNITY_SERVER`).
-    *   Build it.
-3.  **Client Build:**
-    *   Select Profile: **Vidar_Client**.
-    *   Role: **Client**.
-    *   Build it.
-
-### **How to Run (Local Testing)**
-1.  **Start Server:**
-    *   Terminal: `./Vidar_Server.app/Contents/MacOS/Vidar -logFile server.log`
-    *   *Watch Logs:* `tail -f server.log`
-    *   *Success:* Look for `[Matchmaking] Dedicated Session Created`.
-2.  **Start Clients:**
-    *   Launch `Vidar_Client.app` (Instance 1). Click **Find Match**.
-    *   Launch `Vidar_Client.app` (Instance 2). Click **Find Match**.
-    *   *Result:* They will join the Server's session.
+### **B. Edgegap Integration**
+*   **Env Vars:** Edgegap injects variables like `ARBITRIUM_PORTS_MAPPING` into the container.
+*   **EdgegapServerBootstrap:** This script (if active) parses these variables to understand its public IP/Port, though `DedicatedServerManager` handles the critical bind logic.
+*   **Termination:** When the match ends, the server should call `Application.Quit()` to kill the container (saving Edgegap costs).
 
 ---
 
-## 5. Troubleshooting Guide
+## 4. Client Logic (The "Frontend")
 
-*   **"Namespace 'Lobby' missing":** Ensure `com.unity.services.multiplayer` is installed (v1.1+). We replaced the standalone packages.
-*   **"Pulled: [Empty]":** Your `CardDefinition` asset has no "Display Name".
-*   **"Purchase Failed":** You have 0 Gold. Reset account or grant starter gold in code.
-*   **Client Timeout:** The `MultiplayerService` might not have auto-configured `UnityTransport`. Ensure `WithRelayNetwork()` was called on creation.
+The Client connects to the specific IP/Port returned by Edgegap.
+
+### **A. Authentication & Data**
+*   **Login:** `AuthenticationManager` logs the user in anonymously.
+*   **Profile:** `PlayerDataManager` fetches `PlayerProfile` (Gold, Cards) from Unity Cloud Save.
+*   **Gacha:** `BuyPack()` runs client-side but saves results to Cloud immediately to prevent data loss.
+
+### **B. Matchmaking Flow**
+1.  **User Action:** Player clicks "Find Match" in `Menu-Global`.
+2.  **API Request:** `MatchmakingManager` calls `EdgegapLauncher.DeployServer()`.
+    *   Payload: `{"app_name": "vidar-game", "version_name": "v1", "ip_list": ["<ClientIP>"]}`
+3.  **Deployment:** Edgegap spins up a new server instance near the player.
+4.  **Response:** Client receives JSON with `public_ip` and `external_port` (e.g., `30289`).
+5.  **Warmup:** Client waits **2 seconds** to allow the server container to initialize Unity.
+6.  **Connection:** `UnityTransport` updates target IP/Port -> `NetworkManager.Singleton.StartClient()`.
+
+---
+
+## 5. Network & Gameplay Structure
+
+### **A. NetworkManager Setup**
+*   **Location:** `Boot.unity` (Persistent "Services" GameObject).
+*   **Protocol:** UDP (Unity Transport).
+*   **Sync:** Uses `NetworkVariable<T>` for state (Health, Turn Number) and `RPC`s for actions.
+
+### **B. Gameplay Loop (`Match.unity`)**
+*   **TurnManager (NetworkBehaviour):**
+    *   Manages `CurrentTurn` (Int) and `CurrentPhase` (Enum).
+    *   **Server:** Authoritative over turn timers and phase switching.
+    *   **Client:** Listens to `OnValueChanged` to update UI.
+*   **Player Spawning:**
+    *   Players spawn as "Commanders" (Network Prefabs).
+    *   Owned objects allow clients to send input (Click to Move/Attack).
+*   **Win Condition:**
+    *   Server checks if a Commander's HP <= 0.
+    *   Server sends `ClientRpc` to show "Victory/Defeat" screen.
+    *   Server shuts down.
+
+---
+
+## 6. DevOps: Build & Deploy Guide
+
+### **A. Building for Edgegap**
+1.  **Unity Build:**
+    *   Profile: **Vidar_Server**
+    *   Platform: **Linux (x86_64)**
+    *   Options: **Server Build** (Checked)
+    *   Output Path: `Builds/LinuxServer/`
+2.  **Docker Build:**
+    *   Command: `docker build -t vidar-server:v1 .`
+    *   *Note: Dockerfile installs `libgtk-3-0` to support Unity headless dependencies.*
+3.  **Push to Registry:**
+    *   Tag: `docker tag vidar-server:v1 registry.edgegap.com/<ORG>/vidar-game:v1`
+    *   Push: `docker push registry.edgegap.com/<ORG>/vidar-game:v1`
+
+### **B. Edgegap Dashboard Config**
+*   **App Name:** `vidar-game` (Must match Unity Config).
+*   **Version:** `v1`.
+*   **Port Mapping:** `7777` (Internal) -> UDP (Protocol).
+*   **Image:** `registry.edgegap.com/<ORG>/vidar-game`.
+
+### **C. Local Testing (ParrelSync / PlayMode)**
+*   **Client Mode:** Use standard "Play". Ensure "Multiplayer PlayMode Tools" is set to Client/Host.
+*   **Server Simulation:** Use `-mode server` arg or "Server" mode in tools to test `DedicatedServerManager` logic locally.
+
+---
+
+## 7. Troubleshooting Common Issues
+
+*   **"Connection Failed" (Client):**
+    *   Server might be binding to `localhost` instead of `0.0.0.0`. Check `DedicatedServerManager.cs`.
+    *   Dashboard Port Protocol might be TCP (Must be UDP).
+    *   Firewall/Anti-Virus blocking UDP packets.
+*   **"DllNotFound: libgtk-3" (Server Logs):**
+    *   Dockerfile is missing `apt-get install libgtk-3-0`.
+*   **"Config is Missing" (Client Logs):**
+    *   `EdgegapConfig.asset` is missing from `Resources/Config/`. Check Inspector fallback settings on `EdgegapLauncher`.
+*   **Server Loads Menu Scene:**
+    *   `NetworkManager` is missing from `Boot` scene, causing `DedicatedServerManager` to crash/return early.
+    *   Build Target in Editor was not switched back to "Client" (forces `UNITY_SERVER` define).
