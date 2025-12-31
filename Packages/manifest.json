@@ -18,6 +18,7 @@
     "com.unity.render-pipelines.universal": "17.3.0",
     "com.unity.sdk.linux-x86_64": "1.0.2",
     "com.unity.services.cloudsave": "3.4.0",
+    "com.unity.services.multiplayer": "2.0.0",
     "com.unity.services.vivox": "16.8.0",
     "com.unity.timeline": "1.8.9",
     "com.unity.toolchain.macos-arm64-linux": "1.0.2",
