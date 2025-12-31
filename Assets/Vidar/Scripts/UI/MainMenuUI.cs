@@ -36,14 +36,13 @@ public class MainMenuUI : MonoBehaviour
 
     public void OnPlayClicked()
     {
-        if (networkBootstrap != null)
+        if (MatchmakingManager.Instance != null)
         {
-            networkBootstrap.InitiateConnection();
+            MatchmakingManager.Instance.FindMatch();
         }
         else
         {
-            var boot = FindFirstObjectByType<UnifiedBootstrap>();
-            if (boot) boot.InitiateConnection();
+            Debug.LogError("MatchmakingManager not found!");
         }
     }
 

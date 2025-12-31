@@ -15,7 +15,7 @@ EditorBuildSettings:
     path: Assets/Vidar/Scenes/Menu/Menu-Global.unity
     guid: a0bebfb8fb96b4572abfe37331704df7
   - enabled: 1
-    path: Assets/Vidar/Scenes/Sandbox/MVP.unity
+    path: Assets/Vidar/Scenes/Match/Match.unity
     guid: 725ef4e7a4fb01e458248de258891410
   m_configObjects:
     com.unity.adaptiveperformance.simulator.provider_settings: {fileID: 11400000, guid: 5c03e9f281139a14d8ed30a40a09541a, type: 2}

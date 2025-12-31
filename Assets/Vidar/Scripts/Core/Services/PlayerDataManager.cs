@@ -104,14 +104,14 @@ public class PlayerDataManager : MonoBehaviour
         
         if (pulledCard != null)
         {
-             await UnlockHero(pulledCard.cardId);
+             UnlockHero(pulledCard.cardId);
         }
         
         await SaveProfileAsync();
         return pulledCard;
     }
 
-    public async Task UnlockHero(int cardId)
+    public void UnlockHero(int cardId)
     {
         if (CurrentProfile.UnlockedHeroIds.Contains(cardId))
         {
