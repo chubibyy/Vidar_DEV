@@ -13,15 +13,14 @@ public class TurnManager : NetworkBehaviour
 {
     // ---------- Cartes & Zones ----------
     [Header("Cards Registry")]
-    [SerializeField] private CardDefinition[] allCards; // Renseigner dans l’inspector (tous les SO de cartes)
+    [SerializeField] private CardRegistry cardRegistry; // Reference centralized registry
     [SerializeField] private Transform spawnZoneP1;     // BoxCollider requis
     [SerializeField] private Transform spawnZoneP2;     // BoxCollider requis
 
     private CardDefinition GetCard(int id)
     {
-        if (allCards == null) return null;
-        foreach (var c in allCards) if (c && c.cardId == id) return c;
-        return null;
+        if (cardRegistry == null) return null;
+        return cardRegistry.GetCardById(id);
     }
 
     // ---------- Etat ----------

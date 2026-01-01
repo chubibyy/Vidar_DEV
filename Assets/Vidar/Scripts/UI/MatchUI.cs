@@ -15,10 +15,6 @@ public class MatchUI : MonoBehaviour
     public Button btnMakeMove;
     public Button btnEndTurn;
     private CameraRig _camRig;
-    
-    [Header("Hand UI")]
-    [SerializeField] private Transform handContainer;
-    [SerializeField] private GameObject cardButtonPrefab;
 
     [Header("Debug")]
     public bool forceInteractableForDebug = false;
@@ -60,52 +56,6 @@ public class MatchUI : MonoBehaviour
 
         // Premier rendu
         Render(turnManager.State);
-        
-        // Init Hand
-        InitializeHand();
-    }
-    
-    private void InitializeHand()
-    {
-        if (handContainer == null || cardButtonPrefab == null) return;
-        if (PlayerDataManager.Instance == null || PlayerDataManager.Instance.CurrentProfile == null) return;
-        
-        foreach (Transform child in handContainer) Destroy(child.gameObject);
-        
-        foreach (int cardId in PlayerDataManager.Instance.CurrentProfile.CurrentDeckIds)
-        {
-            var def = PlayerDataManager.Instance.GetCardDef(cardId);
-            if (def != null)
-            {
-                var go = Instantiate(cardButtonPrefab, handContainer);
-                
-                // Setup Visuals
-                var img = go.GetComponent<Image>();
-                if (img && def.icon) img.sprite = def.icon;
-                
-                var txt = go.GetComponentInChildren<TextMeshProUGUI>();
-                if (txt) txt.text = def.displayName;
-                
-                // Setup Click
-                var btn = go.GetComponent<Button>();
-                if (btn)
-                {
-                    btn.onClick.AddListener(() => OnCardClicked(cardId));
-                }
-            }
-        }
-    }
-    
-    private void OnCardClicked(int cardId)
-    {
-        if (turnManager != null && turnManager.IsMyTurn())
-        {
-            turnManager.SummonHeroServerRpc(cardId);
-        }
-        else
-        {
-            Debug.Log("Not your turn!");
-        }
     }
 
     void OnDestroy()

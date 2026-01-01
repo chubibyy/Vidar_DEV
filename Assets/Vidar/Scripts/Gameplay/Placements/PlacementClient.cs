@@ -7,7 +7,7 @@ using UnityEngine.InputSystem;
 
 public class PlacementClient : MonoBehaviour
 {
-    public PlayerDeck deck;
+    // public PlayerDeck deck; // REMOVED
     public CameraRig cameraRig;
     public LayerMask placementMask = ~0;
     public Transform spawnZoneP1;
@@ -60,12 +60,21 @@ public class PlacementClient : MonoBehaviour
         return EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
     }
 
-    public void SelectCardByIndex(int index)
+    /// <summary>
+    /// Selects a card by ID to be placed on the next click.
+    /// </summary>
+    public void SelectCard(int cardId)
     {
-        if (deck == null || deck.startingCards == null) return;
-        if (index < 0 || index >= deck.startingCards.Length) return;
+        if (DeckManager.Instance == null)
+        {
+            Debug.LogError("DeckManager not found!");
+            return;
+        }
 
-        _selectedCard = deck.startingCards[index];
+        var def = DeckManager.Instance.GetCardDef(cardId);
+        if (def == null) return;
+
+        _selectedCard = def;
         Debug.Log($"[Placement] Carte sélectionnée: {_selectedCard.displayName}");
 
         if (cameraRig) cameraRig.SetMode(CameraRig.Mode.Master);

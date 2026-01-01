@@ -20,7 +20,7 @@ The project follows a **Client-Server** authoritative model.
 | **Transport** | Unity Transport (UTP) | UDP-based packet delivery. |
 | **Hosting** | Edgegap | Arbitrium Orchestrator for Docker containers. |
 | **Auth** | Unity Authentication | Anonymous login & Player ID persistence. |
-| **Database** | Unity Cloud Save | Player profile (Gold, Unlocked Cards). |
+| **Database** | Unity Cloud Save | Player profile (Gold, Unlocked Cards, Current Deck). |
 | **DevOps** | Docker | Linux x86_64 containerization. |
 
 ---
@@ -36,26 +36,30 @@ Assets/Vidar/
 │   ├── Boot.unity                 # Entry Point. Initializes Services & NetworkManager.
 │   ├── Menu/
 │   │   ├── Menu-Sign.unity        # Login Screen
-│   │   └── Menu-Global.unity      # Main Hub (Deck, Shop, Find Match)
+│   │   └── Menu-Global.unity      # Main Hub (Deck Builder, Shop, Find Match)
 │   └── Match.unity                # The Game Arena (Server loads this immediately)
 ├── Scripts/
 │   ├── Core/
 │   │   ├── BootController.cs      # Decides if we are Client or Server
+│   │   ├── Data/
+│   │   │   ├── PlayerProfile.cs   # JSON Data: Gold, UnlockedCards, CurrentDeckIds
+│   │   │   └── CardRegistry.cs    # SO: Central Database of all CardDefinitions
 │   │   ├── Services/
 │   │   │   ├── DedicatedServerManager.cs # SERVER: Starts Netcode on 0.0.0.0:7777
 │   │   │   ├── MatchmakingManager.cs     # CLIENT: Requests Edgegap Server
-│   │   │   ├── PlayerDataManager.cs      # DATA: Cloud Save & Gacha Logic
+│   │   │   ├── PlayerDataManager.cs      # DATA: Cloud Save (Load/Save Profile & Deck)
 │   │   │   └── EdgegapBootstrap/         # EDGEGAP Integration
-│   │   │       ├── EdgegapLauncher.cs    # Client API to call POST /deploy
-│   │   │       └── EdgegapServerBootstrap.cs # Server Env Var Parser
 │   ├── Gameplay/
-│   │   ├── TurnManager.cs         # Core Game Loop (Turns, Phases)
-│   │   ├── UnitController.cs      # Unit Logic (Movement, Attack)
-│   │   └── CardSystem/            # Card Data & Casting
-│   └── UI/                        # UI Logic (MainMenu, In-Game HUD)
-├── ScriptableObjects/
-│   ├── Config/                    # Game Settings
-│   └── Cards/                     # Card Definitions (Stats, Prefabs)
+│   │   ├── TurnManager.cs         # Core Game Loop (Turns, RPCs for Summoning)
+│   │   ├── Cards/                 # Card Logic
+│   │   │   ├── DeckManager.cs     # GAME: Loads player deck for the match
+│   │   │   └── CardDefinition.cs  # SO: Stats (Mana, Health, Prefab)
+│   │   ├── Placements/
+│   │   │   └── PlacementClient.cs # MAP: Raycast logic for unit placement
+│   └── UI/                        # UI Logic
+│       ├── MainMenuUI.cs          # Hub UI (Deck Building & Shop)
+│       ├── MatchUI.cs             # In-Game HUD (Turn Info)
+│       └── MatchDeckUI.cs         # In-Game Hand (Card Buttons & Interactions)
 ```
 
 ---
@@ -92,8 +96,10 @@ The Client connects to the specific IP/Port returned by Edgegap.
 
 ### **A. Authentication & Data**
 *   **Login:** `AuthenticationManager` logs the user in anonymously.
-*   **Profile:** `PlayerDataManager` fetches `PlayerProfile` (Gold, Cards) from Unity Cloud Save.
-*   **Gacha:** `BuyPack()` runs client-side but saves results to Cloud immediately to prevent data loss.
+*   **Profile:** `PlayerDataManager` fetches `PlayerProfile` from Unity Cloud Save.
+    *   **Data:** Contains Gold, Unlocked Hero IDs, and `CurrentDeckIds`.
+    *   **Deck Building:** Handled in `MainMenuUI`. Players select cards from their collection to build a valid deck (max 4 cards), which is saved via `SaveDeck()`.
+*   **Gacha:** `BuyPack()` runs client-side but saves results to Cloud immediately.
 
 ### **B. Matchmaking Flow**
 1.  **User Action:** Player clicks "Find Match" in `Menu-Global`.
@@ -116,15 +122,14 @@ The Client connects to the specific IP/Port returned by Edgegap.
 ### **B. Gameplay Loop (`Match.unity`)**
 *   **TurnManager (NetworkBehaviour):**
     *   Manages `CurrentTurn` (Int) and `CurrentPhase` (Enum).
-    *   **Server:** Authoritative over turn timers and phase switching.
-    *   **Client:** Listens to `OnValueChanged` to update UI.
-*   **Player Spawning:**
-    *   Players spawn as "Commanders" (Network Prefabs).
-    *   Owned objects allow clients to send input (Click to Move/Attack).
-*   **Win Condition:**
-    *   Server checks if a Commander's HP <= 0.
-    *   Server sends `ClientRpc` to show "Victory/Defeat" screen.
-    *   Server shuts down.
+    *   **Registry:** Uses `CardRegistry` (ScriptableObject) to resolve Card IDs sent by clients.
+    *   **Actions:**
+        *   `SummonHeroServerRpc(cardId)`: Spawns unit in default zone.
+        *   `PlaceHeroServerRpc(cardId, position)`: Spawns unit at specific raycast position.
+*   **Deck System:**
+    *   **DeckManager:** Loads the player's saved deck from `PlayerProfile` at start of match.
+    *   **MatchDeckUI:** visualizes the hand. Clicking a card invokes `SummonHeroServerRpc`.
+    *   **PlacementClient:** Handles raycasting for "drag & drop" or "click to place" style input.
 
 ---
 
@@ -161,10 +166,11 @@ The Client connects to the specific IP/Port returned by Edgegap.
     *   Server might be binding to `localhost` instead of `0.0.0.0`. Check `DedicatedServerManager.cs`.
     *   Dashboard Port Protocol might be TCP (Must be UDP).
     *   Firewall/Anti-Virus blocking UDP packets.
-*   **"DllNotFound: libgtk-3" (Server Logs):**
-    *   Dockerfile is missing `apt-get install libgtk-3-0`.
-*   **"Config is Missing" (Client Logs):**
-    *   `EdgegapConfig.asset` is missing from `Resources/Config/`. Check Inspector fallback settings on `EdgegapLauncher`.
+*   **"NullReference in TurnManager":**
+    *   `CardRegistry` field in Inspector is likely missing. Assign the SO.
+*   **"Deck is Empty":**
+    *   Ensure `PlayerDataManager` is in the scene (Boot) and Profile loaded.
+    *   Check if `DeckManager` exists in Match scene.
 *   **Server Loads Menu Scene:**
     *   `NetworkManager` is missing from `Boot` scene, causing `DedicatedServerManager` to crash/return early.
     *   Build Target in Editor was not switched back to "Client" (forces `UNITY_SERVER` define).
