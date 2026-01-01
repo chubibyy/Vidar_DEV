@@ -10,8 +10,10 @@ public class MainMenuUI : MonoBehaviour
     
     [Header("Collection UI")]
     [SerializeField] private GameObject cardUiPrefab; // Prefab with Image & Text
-    [SerializeField] private Transform deckGridContainer; // The parent (GridLayoutGroup)
-    
+    [SerializeField] private Transform deckGridContainer; // The parent (GridLayoutGroup) for Collection
+    [SerializeField] private Transform currentDeckContainer; // The parent for Selected Deck
+    [SerializeField] private Button saveDeckButton;
+
     [Header("Shop UI")]
     [SerializeField] private TextMeshProUGUI lastPullText; // Text to show result
 
@@ -20,10 +22,17 @@ public class MainMenuUI : MonoBehaviour
     [SerializeField] private GameObject deckPanel;
     [SerializeField] private GameObject shopPanel;
 
+    private System.Collections.Generic.List<int> localDeck = new System.Collections.Generic.List<int>();
+
     private void Start()
     {
         // Force Menu Panel on Start
         ShowMenu();
+        
+        if (saveDeckButton)
+        {
+            saveDeckButton.onClick.AddListener(OnSaveDeckClicked);
+        }
     }
 
     private void UpdateUI()
@@ -50,6 +59,12 @@ public class MainMenuUI : MonoBehaviour
     
     public void ShowDeck() 
     {
+        // Init local deck from profile
+        if (PlayerDataManager.Instance != null && PlayerDataManager.Instance.CurrentProfile != null)
+        {
+            localDeck = new System.Collections.Generic.List<int>(PlayerDataManager.Instance.CurrentProfile.CurrentDeckIds);
+        }
+        
         ShowPanel(deckPanel);
         RefreshDeckView();
     }
@@ -94,35 +109,85 @@ public class MainMenuUI : MonoBehaviour
 
     private void RefreshDeckView()
     {
-        if (deckGridContainer == null || cardUiPrefab == null || PlayerDataManager.Instance == null) return;
-
-        // Clear existing items
-        foreach (Transform child in deckGridContainer) 
-        {
-            Destroy(child.gameObject);
-        }
-
-        // Populate
+        if (PlayerDataManager.Instance == null) return;
         var profile = PlayerDataManager.Instance.CurrentProfile;
         if (profile == null) return;
 
-        foreach (int cardId in profile.UnlockedHeroIds)
+        // 1. Render Collection (Unlocked but NOT in localDeck)
+        if (deckGridContainer)
         {
-            var def = PlayerDataManager.Instance.GetCardDef(cardId);
-            if (def != null)
+            foreach (Transform child in deckGridContainer) Destroy(child.gameObject);
+            
+            foreach (int cardId in profile.UnlockedHeroIds)
             {
-                var go = Instantiate(cardUiPrefab, deckGridContainer);
-                
-                // Simple setup: Find Image component for icon, TextMeshPro for name
-                var img = go.GetComponent<Image>();
-                if (img && def.icon) img.sprite = def.icon;
+                // Optional: Check if already in deck if you want to hide it
+                // if (localDeck.Contains(cardId)) continue; 
 
-                var txt = go.GetComponentInChildren<TextMeshProUGUI>();
-                if (txt) 
+                var def = PlayerDataManager.Instance.GetCardDef(cardId);
+                if (def != null)
                 {
-                    txt.text = string.IsNullOrEmpty(def.displayName) ? $"#{def.cardId}" : def.displayName;
+                    CreateCardUI(def, deckGridContainer, () => OnCollectionCardClicked(cardId));
                 }
             }
+        }
+
+        // 2. Render Current Deck
+        if (currentDeckContainer)
+        {
+            foreach (Transform child in currentDeckContainer) Destroy(child.gameObject);
+            
+            foreach (int cardId in localDeck)
+            {
+                var def = PlayerDataManager.Instance.GetCardDef(cardId);
+                if (def != null)
+                {
+                     CreateCardUI(def, currentDeckContainer, () => OnDeckCardClicked(cardId));
+                }
+            }
+        }
+    }
+
+    private void CreateCardUI(CardDefinition def, Transform parent, UnityEngine.Events.UnityAction onClick)
+    {
+        if (cardUiPrefab == null) return;
+        
+        var go = Instantiate(cardUiPrefab, parent);
+        
+        var img = go.GetComponent<Image>();
+        if (img && def.icon) img.sprite = def.icon;
+
+        var txt = go.GetComponentInChildren<TextMeshProUGUI>();
+        if (txt) 
+        {
+            txt.text = string.IsNullOrEmpty(def.displayName) ? $"#{def.cardId}" : def.displayName;
+        }
+        
+        var btn = go.GetComponent<Button>();
+        if (btn == null) btn = go.AddComponent<Button>();
+        btn.onClick.AddListener(onClick);
+    }
+
+    private void OnCollectionCardClicked(int cardId)
+    {
+        if (localDeck.Contains(cardId)) return; // Already in deck
+        if (localDeck.Count >= 4) return; // Full
+
+        localDeck.Add(cardId);
+        RefreshDeckView();
+    }
+
+    private void OnDeckCardClicked(int cardId)
+    {
+        localDeck.Remove(cardId);
+        RefreshDeckView();
+    }
+
+    public async void OnSaveDeckClicked()
+    {
+        if (PlayerDataManager.Instance != null)
+        {
+            bool success = await PlayerDataManager.Instance.SaveDeck(localDeck);
+            Debug.Log(success ? "Deck Saved!" : "Deck Save Failed");
         }
     }
 }

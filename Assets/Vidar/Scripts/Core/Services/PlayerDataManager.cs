@@ -42,6 +42,11 @@ public class PlayerDataManager : MonoBehaviour
             {
                 // Deserialize the JSON string back into our object
                 CurrentProfile = item.Value.GetAs<PlayerProfile>();
+                
+                // Migration: Ensure new fields are initialized
+                if (CurrentProfile.CurrentDeckIds == null)
+                    CurrentProfile.CurrentDeckIds = new List<int>();
+                    
                 Debug.Log($"[Database] Profile loaded: {CurrentProfile.Username} (Lvl {CurrentProfile.Level})");
             }
             else
@@ -79,6 +84,34 @@ public class PlayerDataManager : MonoBehaviour
         {
             Debug.LogError($"[Database] Save Failed: {e.Message}");
         }
+    }
+    
+    // --- Deck Management ---
+
+    public async Task<bool> SaveDeck(List<int> newDeckIds)
+    {
+        if (CurrentProfile == null) return false;
+
+        // Validation: Max 4 cards
+        if (newDeckIds.Count > 4)
+        {
+            Debug.LogWarning("Deck cannot exceed 4 cards.");
+            return false;
+        }
+
+        // Validation: Ownership
+        foreach (var id in newDeckIds)
+        {
+            if (!CurrentProfile.UnlockedHeroIds.Contains(id))
+            {
+                Debug.LogError($"Player does not own card {id}");
+                return false;
+            }
+        }
+
+        CurrentProfile.CurrentDeckIds = new List<int>(newDeckIds);
+        await SaveProfileAsync();
+        return true;
     }
 
     // --- Economy & Gacha ---

@@ -11,6 +11,9 @@ public class PlayerProfile
     // The list of Card IDs that the player has unlocked and can use in their deck
     public List<int> UnlockedHeroIds;
 
+    // The current active deck (list of card IDs)
+    public List<int> CurrentDeckIds;
+
     // Constructor for a fresh account
     public PlayerProfile()
     {
@@ -18,6 +21,7 @@ public class PlayerProfile
         Level = 1;
         Gold = 0;
         UnlockedHeroIds = new List<int>();
+        CurrentDeckIds = new List<int>();
     }
 
     /// <summary>
