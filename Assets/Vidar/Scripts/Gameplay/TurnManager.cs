@@ -19,8 +19,17 @@ public class TurnManager : NetworkBehaviour
 
     private CardDefinition GetCard(int id)
     {
-        if (cardRegistry == null) return null;
-        return cardRegistry.GetCardById(id);
+        if (cardRegistry == null)
+        {
+            Debug.LogError("[TurnManager] CardRegistry is NULL! Please assign it in the Inspector.");
+            return null;
+        }
+        var card = cardRegistry.GetCardById(id);
+        if (card == null)
+        {
+            Debug.LogError($"[TurnManager] Card ID {id} not found in Registry (Count: {cardRegistry.allCards.Count})");
+        }
+        return card;
     }
 
     // ---------- Etat ----------
@@ -158,7 +167,6 @@ public class TurnManager : NetworkBehaviour
         return senderIndex != -1 && senderIndex == State.activePlayer;
     }
 
-    // ---------- Summon (spawn sans clic map) ----------
     [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
     public void SummonHeroServerRpc(int cardId, RpcParams rpc = default)
     {
@@ -179,10 +187,15 @@ public class TurnManager : NetworkBehaviour
         }
 
         var card = GetCard(cardId);
-        if (!card || !card.unitPrefab)
+        if (!card)
         {
-            PlaceHeroResultClientRpc(false, "carte/prefab invalide",
-                Target(sender));
+             PlaceHeroResultClientRpc(false, $"Card ID {cardId} not found", Target(sender));
+             return;
+        }
+        
+        if (!card.unitPrefab)
+        {
+            PlaceHeroResultClientRpc(false, $"Card '{card.displayName}' has no Prefab", Target(sender));
             return;
         }
 

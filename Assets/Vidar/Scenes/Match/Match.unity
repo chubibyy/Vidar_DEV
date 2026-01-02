@@ -1417,8 +1417,6 @@ GameObject:
   - component: {fileID: 1259019008}
   - component: {fileID: 1259019007}
   - component: {fileID: 1259019006}
-  - component: {fileID: 1259019009}
-  - component: {fileID: 1259019010}
   m_Layer: 5
   m_Name: Info_Macth_Panel
   m_TagString: Untagged
@@ -1504,52 +1502,6 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1259019004}
   m_CullTransparentMesh: 1
---- !u!114 &1259019009
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1259019004}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 401068db6a8b6a54e87acf17d7983bdb, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::PlayerDeck
-  startingCards:
-  - {fileID: 11400000, guid: 69f1ebf13cc7d8f48ba200e0e3936c99, type: 2}
-  - {fileID: 11400000, guid: 3442bff8588d7c842abb8e0ee0f353e4, type: 2}
-  - {fileID: 11400000, guid: 5489f1cde44ad104aac18750a2c4d1a9, type: 2}
-  - {fileID: 11400000, guid: 75c0b51112dcb9a49beece44d76db67a, type: 2}
-  - {fileID: 11400000, guid: 3ef0f8c48c179b74cbd7515bc80f88ff, type: 2}
---- !u!114 &1259019010
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1259019004}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 84c986a1dfec0c846a4128cb2b4c81bf, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::DeckInvokeUI
-  deck: {fileID: 1259019009}
-  turnManager: {fileID: 511699761}
-  invokeButton: {fileID: 1893197584}
-  cardButtons:
-  - {fileID: 0}
-  - {fileID: 0}
-  - {fileID: 0}
-  - {fileID: 0}
-  - {fileID: 0}
-  selectedColor:
-    r: 0.2
-    g: 0.7
-    b: 1
-    a: 1
-  _selectedIndex: -1
-  _originalBlocks: []
 --- !u!1 &1270052285
 GameObject:
   m_ObjectHideFlags: 0
@@ -1686,7 +1638,19 @@ MonoBehaviour:
   m_TargetGraphic: {fileID: 1893197585}
   m_OnClick:
     m_PersistentCalls:
-      m_Calls: []
+      m_Calls:
+      - m_Target: {fileID: 511699761}
+        m_TargetAssemblyTypeName: TurnManager, Assembly-CSharp
+        m_MethodName: MakeMove
+        m_Mode: 1
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
 --- !u!114 &1893197585
 MonoBehaviour:
   m_ObjectHideFlags: 0

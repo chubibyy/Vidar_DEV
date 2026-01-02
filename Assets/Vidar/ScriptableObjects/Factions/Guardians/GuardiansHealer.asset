@@ -17,7 +17,7 @@ MonoBehaviour:
   description: 
   team: 0
   icon: {fileID: 0}
-  unitPrefab: {fileID: 0}
+  unitPrefab: {fileID: 8558893927247954584, guid: aa28b292656dd07408feabbf8f8c91f9, type: 3}
   manaCost: 0
   maxHealth: 0
   attackPower: 0

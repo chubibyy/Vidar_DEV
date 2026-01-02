@@ -56,7 +56,10 @@ public class MatchDeckUI : MonoBehaviour
         var txt = go.GetComponentInChildren<TextMeshProUGUI>();
         if (txt) txt.text = def.displayName;
 
+        // Ensure Button component exists
         var btn = go.GetComponent<Button>();
+        if (btn == null) btn = go.AddComponent<Button>();
+
         if (btn)
         {
             btn.onClick.AddListener(() => OnCardClicked(def.cardId, btn));
@@ -65,9 +68,11 @@ public class MatchDeckUI : MonoBehaviour
 
     private void OnCardClicked(int cardId, Button btn)
     {
+        Debug.Log($"[MatchDeckUI] Clicked card {cardId}");
+
         if (turnManager == null || !turnManager.IsMyTurn())
         {
-            Debug.Log("Not your turn!");
+            Debug.Log("[MatchDeckUI] Not your turn or TurnManager missing!");
             return;
         }
 
