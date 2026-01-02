@@ -1,0 +1,22 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8261f07e15cd04e698d58c6a388886f0, type: 3}
+  m_Name: CardVisualSettings
+  m_EditorClassIdentifier: Assembly-CSharp::CardVisualSettings
+  commonColor: {r: 0.5, g: 0.5, b: 0.5, a: 1}
+  rareColor: {r: 0, g: 0, b: 1, a: 1}
+  epicColor: {r: 0.6, g: 0, b: 0.8, a: 1}
+  legendaryColor: {r: 1, g: 0.84, b: 0, a: 1}
+  tankIcon: {fileID: -356866483, guid: d59c9e25c509c4814a862da95f9a94f0, type: 3}
+  dpsRangeIcon: {fileID: 465560078, guid: d48ebf487f35a44bd8a90faf382433d9, type: 3}
+  dpsMeleeIcon: {fileID: -1570157872, guid: 56747880593bc44e7b1eebfc8d226d64, type: 3}
+  priestessIcon: {fileID: 481762010, guid: c10d69aada1a7418f8e63052c801b85a, type: 3}

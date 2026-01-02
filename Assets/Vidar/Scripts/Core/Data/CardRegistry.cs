@@ -19,4 +19,9 @@ public class CardRegistry : ScriptableObject
     {
         return allCards.Find(c => c.cardId == id);
     }
+
+    public List<CardDefinition> GetCardsByRarity(RarityType rarity)
+    {
+        return allCards.FindAll(c => c.rarity == rarity);
+    }
 }

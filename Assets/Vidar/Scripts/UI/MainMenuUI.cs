@@ -13,6 +13,7 @@ public class MainMenuUI : MonoBehaviour
     [SerializeField] private Transform deckGridContainer; // The parent (GridLayoutGroup) for Collection
     [SerializeField] private Transform currentDeckContainer; // The parent for Selected Deck
     [SerializeField] private Button saveDeckButton;
+    [SerializeField] private CardVisualSettings visualSettings;
 
     [Header("Shop UI")]
     [SerializeField] private TextMeshProUGUI lastPullText; // Text to show result
@@ -149,17 +150,29 @@ public class MainMenuUI : MonoBehaviour
 
     private void CreateCardUI(CardDefinition def, Transform parent, UnityEngine.Events.UnityAction onClick)
     {
-        if (cardUiPrefab == null) return;
+        // Use specific prefab if defined, otherwise default
+        GameObject prefabToUse = (def.overrideCardPrefab != null) ? def.overrideCardPrefab : cardUiPrefab;
+        if (prefabToUse == null) return;
         
-        var go = Instantiate(cardUiPrefab, parent);
+        var go = Instantiate(prefabToUse, parent);
         
-        var img = go.GetComponent<Image>();
-        if (img && def.icon) img.sprite = def.icon;
-
-        var txt = go.GetComponentInChildren<TextMeshProUGUI>();
-        if (txt) 
+        // Smart UI Update
+        var ui = go.GetComponent<CardUIController>();
+        if (ui != null && visualSettings != null)
         {
-            txt.text = string.IsNullOrEmpty(def.displayName) ? $"#{def.cardId}" : def.displayName;
+            ui.Setup(def, visualSettings);
+        }
+        else
+        {
+            // Fallback
+            var img = go.GetComponent<Image>();
+            if (img && def.icon) img.sprite = def.icon;
+
+            var txt = go.GetComponentInChildren<TextMeshProUGUI>();
+            if (txt) 
+            {
+                txt.text = string.IsNullOrEmpty(def.displayName) ? $"#{def.cardId}" : def.displayName;
+            }
         }
         
         var btn = go.GetComponent<Button>();

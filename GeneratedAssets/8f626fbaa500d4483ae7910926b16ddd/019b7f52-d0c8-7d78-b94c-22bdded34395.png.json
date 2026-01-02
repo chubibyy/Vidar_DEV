@@ -1,0 +1,20 @@
+{
+    "asset": "8f626fbaa500d4483ae7910926b16ddd",
+    "fileName": "019b7f52-d0c8-7d78-b94c-22bdded34395.png",
+    "prompt": "2D game sprite, full body character, Modern Fantasy RPG style, Priestess Healer class. Modern chic white trench coat over a sleek jumpsuit. Stylized sacred geometric symbols. A floating techno-magical drone hovers beside her projecting golden healing light holograms. Gentle yet confident pose. High quality 2D rendering on transparent background.",
+    "negativePrompt": "",
+    "model": "d724c21b-ca75-4957-b630-2d6ff3f201c3",
+    "modelName": "Biomechanical",
+    "customSeed": -1,
+    "w3CTraceId": "0878eb43b22199b73a23223a4cff4e55",
+    "refinementMode": "Generation",
+    "pixelateTargetSize": 0,
+    "pixelateKeepImageSize": false,
+    "pixelatePixelBlockSize": 0,
+    "pixelateMode": 0,
+    "pixelateOutlineThickness": 0,
+    "doodles": {
+        "m_Items": []
+    },
+    "upscaleFactor": 0
+}

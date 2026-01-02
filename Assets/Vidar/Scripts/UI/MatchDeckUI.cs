@@ -9,6 +9,7 @@ public class MatchDeckUI : MonoBehaviour
     [SerializeField] private Transform handContainer;
     [SerializeField] private GameObject cardButtonPrefab;
     [SerializeField] private TurnManager turnManager;
+    [SerializeField] private CardVisualSettings visualSettings;
 
     // Optional: Visual feedback for selected card
     [SerializeField] private Color normalColor = Color.white;
@@ -47,14 +48,28 @@ public class MatchDeckUI : MonoBehaviour
 
     private void CreateCardButton(CardDefinition def)
     {
-        var go = Instantiate(cardButtonPrefab, handContainer);
+        // Use specific prefab if defined, otherwise default
+        GameObject prefabToUse = (def.overrideCardPrefab != null) ? def.overrideCardPrefab : cardButtonPrefab;
+        if (prefabToUse == null) return;
+
+        var go = Instantiate(prefabToUse, handContainer);
         _spawnedButtons.Add(go);
 
-        var img = go.GetComponent<Image>();
-        if (img && def.icon) img.sprite = def.icon;
-        
-        var txt = go.GetComponentInChildren<TextMeshProUGUI>();
-        if (txt) txt.text = def.displayName;
+        // Try to use the Smart UI Controller
+        var ui = go.GetComponent<CardUIController>();
+        if (ui != null && visualSettings != null)
+        {
+            ui.Setup(def, visualSettings);
+        }
+        else
+        {
+            // Fallback: Manual Setup
+            var img = go.GetComponent<Image>();
+            if (img && def.icon) img.sprite = def.icon;
+            
+            var txt = go.GetComponentInChildren<TextMeshProUGUI>();
+            if (txt) txt.text = def.displayName;
+        }
 
         // Ensure Button component exists
         var btn = go.GetComponent<Button>();

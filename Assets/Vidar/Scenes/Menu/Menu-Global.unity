@@ -557,6 +557,7 @@ MonoBehaviour:
   deckGridContainer: {fileID: 2049014710}
   currentDeckContainer: {fileID: 1959547115}
   saveDeckButton: {fileID: 1732675618}
+  visualSettings: {fileID: 11400000, guid: 77733eb2d11104d8a889858bb72c919b, type: 2}
   lastPullText: {fileID: 0}
   menuPanel: {fileID: 2032607541}
   deckPanel: {fileID: 1627351947}
@@ -1771,9 +1772,9 @@ MonoBehaviour:
     m_Bottom: 0
   m_ChildAlignment: 0
   m_StartCorner: 0
-  m_StartAxis: 0
-  m_CellSize: {x: 100, y: 150}
-  m_Spacing: {x: 10, y: 10}
+  m_StartAxis: 1
+  m_CellSize: {x: 100, y: 100}
+  m_Spacing: {x: 20.27, y: 10}
   m_Constraint: 0
   m_ConstraintCount: 2
 --- !u!1 &2088544182

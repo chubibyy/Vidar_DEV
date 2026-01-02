@@ -1,0 +1,29 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6b51351c8b2215342bcf24893c1cd75f, type: 3}
+  m_Name: GuardiansHealer
+  m_EditorClassIdentifier: Assembly-CSharp::CardDefinition
+  cardId: 0
+  displayName: Healer guardian
+  description: "\t\t\t\t"
+  rarity: 0
+  heroClass: 3
+  team: 1
+  icon: {fileID: 0}
+  unitPrefab: {fileID: 8558893927247954584, guid: 1d8b6a7114aa843528f9c0d6804b487b, type: 3}
+  manaCost: 10
+  maxHealth: 20
+  endurance: 0
+  passiveType: 0
+  passiveValue: 0
+  basicAttack: {fileID: 0}
+  ultimateAbility: {fileID: 11400000, guid: 0e0d3a73b230f4a6d987dbe3cc035e82, type: 2}

@@ -13,11 +13,11 @@ MonoBehaviour:
   m_Name: InvadersWarrior
   m_EditorClassIdentifier: Assembly-CSharp::CardDefinition
   cardId: 6
-  displayName: 
+  displayName: Warrior invaders
   description: 
   team: 0
   icon: {fileID: 0}
-  unitPrefab: {fileID: 0}
-  manaCost: 0
-  maxHealth: 0
-  attackPower: 0
+  unitPrefab: {fileID: 8558893927247954584, guid: a02d71db48f87455e9f1fd648cebe3b7, type: 3}
+  manaCost: 50
+  maxHealth: 50
+  attackPower: 50

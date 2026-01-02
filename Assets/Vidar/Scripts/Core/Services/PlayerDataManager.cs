@@ -132,8 +132,25 @@ public class PlayerDataManager : MonoBehaviour
 
         CurrentProfile.Gold -= packCost;
         
-        // Gacha Logic: Pick random
-        CardDefinition pulledCard = cardRegistry.GetRandomCard();
+        // Gacha Logic: Weighted Rarity
+        float roll = UnityEngine.Random.Range(0f, 100f);
+        RarityType targetRarity;
+
+        if (roll < 60f) targetRarity = RarityType.Common;      // 0-60
+        else if (roll < 85f) targetRarity = RarityType.Rare;   // 60-85 (25%)
+        else if (roll < 95f) targetRarity = RarityType.Epic;   // 85-95 (10%)
+        else targetRarity = RarityType.Legendary;              // 95-100 (5%)
+
+        var pool = cardRegistry.GetCardsByRarity(targetRarity);
+        
+        // Fallback if pool is empty (e.g., no Legendaries created yet)
+        if (pool.Count == 0)
+        {
+            Debug.LogWarning($"No cards found for rarity {targetRarity}, falling back to full pool.");
+            pool = cardRegistry.allCards;
+        }
+
+        CardDefinition pulledCard = pool[UnityEngine.Random.Range(0, pool.Count)];
         
         if (pulledCard != null)
         {

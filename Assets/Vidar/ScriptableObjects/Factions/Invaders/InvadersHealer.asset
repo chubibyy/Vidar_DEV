@@ -13,11 +13,11 @@ MonoBehaviour:
   m_Name: InvadersHealer
   m_EditorClassIdentifier: Assembly-CSharp::CardDefinition
   cardId: 5
-  displayName: 
+  displayName: Invaders healer
   description: 
   team: 0
   icon: {fileID: 0}
-  unitPrefab: {fileID: 0}
-  manaCost: 0
-  maxHealth: 0
-  attackPower: 0
+  unitPrefab: {fileID: 8558893927247954584, guid: 71014b06b34854e40a01cfbcfe10a53d, type: 3}
+  manaCost: 10
+  maxHealth: 10
+  attackPower: 10

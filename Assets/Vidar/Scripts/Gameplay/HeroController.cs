@@ -5,13 +5,19 @@ using UnityEngine.InputSystem;
 #endif
 
 [RequireComponent(typeof(CharacterController))]
+[RequireComponent(typeof(UnitState))]
 public class HeroController : NetworkBehaviour
 {
     private CharacterController _cc;
-    public float moveSpeed = 5f;
+    private UnitState _unitState;
+    
     public float turnSpeed = 360f;
 
-    private void Awake() { _cc = GetComponent<CharacterController>(); }
+    private void Awake() 
+    { 
+        _cc = GetComponent<CharacterController>();
+        _unitState = GetComponent<UnitState>();
+    }
 
     void Update()
     {
@@ -39,8 +45,11 @@ public class HeroController : NetworkBehaviour
         Vector3 dir = new Vector3(h, 0, v);
         if (dir.sqrMagnitude > 0.001f)
         {
+            // Use Networked Move Speed from Passive/Stats
+            float speed = _unitState != null ? _unitState.MoveSpeed.Value : 5f;
+            
             transform.rotation = Quaternion.RotateTowards(transform.rotation, Quaternion.LookRotation(dir), turnSpeed * Time.deltaTime);
-            _cc.Move(dir.normalized * moveSpeed * Time.deltaTime);
+            _cc.Move(dir.normalized * speed * Time.deltaTime);
         }
     }
 }
